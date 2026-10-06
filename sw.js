@@ -1,10 +1,11 @@
-const CACHE_NAME = 'medcare-pwa-v3';
+const CACHE_NAME = 'medcare-pwa-v4';
 const APP_SHELL = [
   './',
   './index.html',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
+  './icons/apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -44,7 +45,6 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (!shouldCache(request)) return;
 
-  // Navegação: tenta a versão mais nova e usa o cache se estiver offline.
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
@@ -58,7 +58,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Dependências estáticas: cache-first. As requisições do Firestore continuam sob controle do SDK do Firebase.
   event.respondWith(
     caches.match(request).then(cached => {
       if (cached) return cached;
