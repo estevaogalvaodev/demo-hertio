@@ -3,13 +3,17 @@
   "short_name": "MedCare",
   "description": "Acompanhamento médico offline-first para pacientes e médicos.",
   "lang": "pt-BR",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
+  "id": "./",
   "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
   "orientation": "portrait",
   "background_color": "#f5f8f7",
   "theme_color": "#0f766e",
-  "id": "./",
+  "prefer_related_applications": false,
+  "categories": ["health", "medical"],
   "icons": [
     {
       "src": "./icons/icon-192.png",
