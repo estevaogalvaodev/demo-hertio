@@ -1,0 +1,1787 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <meta name="description" content="Aplicativo de acompanhamento médico offline-first para pacientes e médicos." />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="MedCare" />
+
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <title>MedCare — Acompanhamento</title>
+
+  <!-- Tailwind via CDN, conforme solicitado. O Service Worker cacheia este recurso depois do primeiro acesso online. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#effcf8', 100: '#d9f7ef', 200: '#b8eee0', 300: '#83ddca',
+              400: '#4ec6b0', 500: '#20aa92', 600: '#118a78', 700: '#0f766e',
+              800: '#115f5a', 900: '#124e4b'
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    /* ============================================================
+       PERSONALIZAÇÃO RÁPIDA — altere só estas variáveis.
+       ============================================================ */
+    :root {
+      --brand: #0f766e;
+      --brand-dark: #115e59;
+      --brand-soft: #effcf8;
+      --ink: #12201f;
+      --muted: #657572;
+      --surface: #ffffff;
+      --surface-2: #f5f8f7;
+      --line: #dfe8e5;
+      --success: #15803d;
+      --warning: #b45309;
+      --danger: #b91c1c;
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(32,170,146,.08), transparent 28%),
+        linear-gradient(180deg, #fbfefd 0%, #f5f8f7 100%);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, textarea, select { font: inherit; }
+    button { -webkit-tap-highlight-color: transparent; }
+
+    .app-shell { min-height: 100vh; }
+    .glass {
+      background: rgba(255,255,255,.86);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid rgba(223,232,229,.9);
+      border-radius: var(--radius);
+      box-shadow: 0 18px 50px rgba(18, 32, 31, .06);
+    }
+    .field {
+      width: 100%;
+      min-height: 48px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 12px 14px;
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s, transform .2s;
+    }
+    .field:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px rgba(15,118,110,.10);
+    }
+    .field::placeholder { color: #95a6a2; }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 48px;
+      padding: 12px 18px;
+      border: 1px solid transparent;
+      border-radius: 15px;
+      color: #fff;
+      background: var(--brand);
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s, background .2s;
+      box-shadow: 0 10px 20px rgba(15,118,110,.18);
+    }
+    .btn-primary:hover { background: var(--brand-dark); transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 11px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--ink);
+      background: #fff;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background .2s, border-color .2s, transform .2s;
+    }
+    .btn-secondary:hover { background: #f9fbfb; border-color: #cbd8d5; transform: translateY(-1px); }
+    .btn-danger {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 46px;
+      padding: 11px 16px;
+      border: 1px solid #fecaca;
+      border-radius: 14px;
+      color: #991b1b;
+      background: #fff7f7;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .badge-green { background: #ecfdf3; color: #166534; }
+    .badge-amber { background: #fff7ed; color: #9a3412; }
+    .badge-slate { background: #f1f5f4; color: #465653; }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      width: 100%;
+      padding: 11px 13px;
+      border-radius: 14px;
+      color: #61706d;
+      font-weight: 700;
+      transition: .2s;
+      cursor: pointer;
+      background: transparent;
+      border: 0;
+      text-align: left;
+    }
+    .nav-item:hover { background: #f1f7f5; color: var(--ink); }
+    .nav-item.active { background: var(--brand-soft); color: var(--brand); }
+
+    .bottom-nav {
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+
+    .toast-wrap {
+      position: fixed;
+      z-index: 1000;
+      right: 16px;
+      left: 16px;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .toast {
+      width: min(100%, 440px);
+      padding: 13px 15px;
+      border-radius: 16px;
+      color: white;
+      box-shadow: 0 20px 50px rgba(0,0,0,.16);
+      animation: toastIn .24s ease-out;
+    }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+    .fade-in { animation: fadeIn .25s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+    .skeleton {
+      position: relative;
+      overflow: hidden;
+      background: #eef3f1;
+    }
+    .skeleton::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-100%);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent);
+      animation: shimmer 1.4s infinite;
+    }
+    @keyframes shimmer { 100% { transform: translateX(100%); } }
+
+    .timeline-line { position: relative; }
+    .timeline-line::before {
+      content: "";
+      position: absolute;
+      left: 13px;
+      top: 5px;
+      bottom: 5px;
+      width: 2px;
+      background: #dbe8e4;
+    }
+    .timeline-dot {
+      position: relative;
+      z-index: 1;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      border: 7px solid #fff;
+      box-shadow: 0 0 0 1px #cfe4df;
+      flex: 0 0 auto;
+    }
+
+    @media (min-width: 900px) {
+      .mobile-only { display: none !important; }
+    }
+    @media (max-width: 899px) {
+      .desktop-only { display: none !important; }
+    }
+
+    .mood-option { display:block; cursor:pointer; }
+    .mood-option input { position:absolute; opacity:0; pointer-events:none; }
+    .mood-option span { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; min-height:82px; border:1px solid var(--line); border-radius:18px; background:#fff; transition:.18s; }
+    .mood-option b { font-size:28px; line-height:1; }
+    .mood-option small { font-size:10px; font-weight:800; color:#8a9996; }
+    .mood-option input:checked + span { border-color:var(--brand); background:var(--brand-soft); box-shadow:0 0 0 3px rgba(15,118,110,.08); transform:translateY(-1px); }
+    .help-chat { min-height: 480px; display:flex; flex-direction:column; justify-content:flex-start; }
+    .help-bubble { max-width:88%; padding:13px 15px; border-radius:18px; margin-bottom:10px; line-height:1.55; font-size:14px; }
+    .help-bubble.bot { background:#f3f7f6; color:#263533; border-bottom-left-radius:7px; align-self:flex-start; }
+    .help-bubble.user { background:var(--brand); color:#fff; border-bottom-right-radius:7px; align-self:flex-end; }
+    .help-choice { display:flex; align-items:center; justify-content:space-between; width:100%; padding:14px 15px; border:1px solid var(--line); border-radius:16px; background:#fff; font-weight:800; color:var(--ink); text-align:left; transition:.18s; }
+    .help-choice:hover { border-color:#c7d8d3; background:#fbfdfd; transform:translateY(-1px); }
+  </style>
+</head>
+<body>
+  <div id="app" class="app-shell"></div>
+  <div id="toast-root" class="toast-wrap" aria-live="polite" aria-atomic="true"></div>
+
+  <script type="module">
+    /* ============================================================
+       ============================================================
+       FIREBASE — COLE AS SUAS CREDENCIAIS NESTE BLOCO
+       Firebase Console > Configurações do projeto > Seus apps > Web
+       ============================================================
+       ============================================================ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB-FUs8qsMy3p8rBVYnQE3q_ZrYAPX2P2A",
+  authDomain: "teste-nutrihertio.firebaseapp.com",
+  projectId: "teste-nutrihertio",
+  storageBucket: "teste-nutrihertio.firebasestorage.app",
+  messagingSenderId: "655853343656",
+  appId: "1:655853343656:web:e21dd8e10b24444109439d"
+};
+
+    /* ============================================================
+       PERSONALIZAÇÃO FUNCIONAL
+       ============================================================ */
+    const SUPPORT_URL = "COLE_AQUI_SEU_LINK_DE_SUPORTE"; // WhatsApp, Google Forms etc.
+    const APP_TIMEZONE_NOTE = "Os horários de lembretes usam o horário local do dispositivo.";
+    const DEFAULT_CHECKIN_TIME = "19:00";
+
+    const FIREBASE_VERSION = "12.19.0";
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      signOut,
+      sendPasswordResetEmail,
+      sendEmailVerification,
+      updateProfile,
+      reload,
+      GoogleAuthProvider,
+      signInWithPopup,
+      signInWithRedirect,
+      getRedirectResult,
+      setPersistence,
+      browserLocalPersistence
+    } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
+    import {
+      initializeFirestore,
+      getFirestore,
+      persistentLocalCache,
+      persistentSingleTabManager,
+      collection,
+      doc,
+      getDoc,
+      getDocs,
+      setDoc,
+      addDoc,
+      updateDoc,
+      deleteDoc,
+      query,
+      where,
+      orderBy,
+      serverTimestamp,
+      limit,
+      waitForPendingWrites,
+      getDocFromCache,
+      getDocFromServer,
+      getDocsFromCache,
+      getDocsFromServer
+    } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+    // ------------------------------------------------------------
+    // Estado e utilitários
+    // ------------------------------------------------------------
+    const appEl = document.getElementById('app');
+    const toastRoot = document.getElementById('toast-root');
+    const configIsValid = () =>
+      FIREBASE_CONFIG.apiKey &&
+      !FIREBASE_CONFIG.apiKey.includes('COLE_') &&
+      FIREBASE_CONFIG.projectId &&
+      !FIREBASE_CONFIG.projectId.includes('SEU_') &&
+      FIREBASE_CONFIG.appId &&
+      !FIREBASE_CONFIG.appId.includes('SEU_');
+
+    const state = {
+      auth: null,
+      db: null,
+      firebaseReady: false,
+      persistenceEnabled: false,
+      online: navigator.onLine,
+      syncing: false,
+      user: null,
+      role: null,
+      userProfile: null,
+      patientProfile: null,
+      patients: [],
+      selectedPatient: null,
+      selectedPatientEvolution: [],
+      patientEvolution: [],
+      currentView: 'home',
+      authMode: 'login',
+      patientSearch: '',
+      helpTrail: [],
+      listeners: [],
+      installPrompt: null,
+      notificationTimerIds: [],
+      lastSyncAt: Number(localStorage.getItem('medcare:lastSyncAt') || 0)
+    };
+
+    const uid = () => state.user?.uid || null;
+    const isDoctor = () => state.role === 'doctor' || state.role === 'nutritionist';
+    const isPatient = () => state.role === 'patient';
+
+    function escapeHTML(value = '') {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function todayKey() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      const raw = typeof value === 'string' ? value : value?.toDate?.() || value;
+      const dt = raw instanceof Date ? raw : new Date(raw);
+      if (Number.isNaN(dt.getTime())) return '—';
+      return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
+
+    function formatDateTime(value) {
+      if (!value) return '—';
+      const raw = typeof value === 'string' ? value : value?.toDate?.() || value;
+      const dt = raw instanceof Date ? raw : new Date(raw);
+      if (Number.isNaN(dt.getTime())) return '—';
+      return dt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function formatNumber(value, digits = 1) {
+      if (value === '' || value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+      return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    }
+
+    function calculateAge(dateOfBirth) {
+      if (!dateOfBirth) return null;
+      const birth = new Date(`${dateOfBirth}T00:00:00`);
+      if (Number.isNaN(birth.getTime())) return null;
+      const now = new Date();
+      let age = now.getFullYear() - birth.getFullYear();
+      const month = now.getMonth() - birth.getMonth();
+      if (month < 0 || (month === 0 && now.getDate() < birth.getDate())) age--;
+      return age >= 0 && age <= 130 ? age : null;
+    }
+
+    function calculateBMI(weightKg, heightCm) {
+      const w = Number(weightKg), h = Number(heightCm) / 100;
+      if (!Number.isFinite(w) || !Number.isFinite(h) || h <= 0) return null;
+      const bmi = w / (h * h);
+      return Number.isFinite(bmi) ? bmi : null;
+    }
+
+    function bmiClassification(bmi, age) {
+      if (!Number.isFinite(bmi)) return '—';
+      if (age !== null && age < 18) return 'Interpretação por idade/sexo';
+      if (bmi < 18.5) return 'Abaixo do peso';
+      if (bmi < 25) return 'Eutrofia';
+      if (bmi < 30) return 'Sobrepeso';
+      if (bmi < 35) return 'Obesidade grau I';
+      if (bmi < 40) return 'Obesidade grau II';
+      return 'Obesidade grau III';
+    }
+
+    function latestEvolution() {
+      return (state.patientEvolution || [])[0] || null;
+    }
+
+    function latestWeight() {
+      return latestEvolution()?.weight ?? state.patientProfile?.currentWeight ?? null;
+    }
+
+    function weightDelta() {
+      const e = state.patientEvolution || [];
+      if (e.length < 2) return null;
+      const current = Number(e[0]?.weight), previous = Number(e[1]?.weight);
+      if (!Number.isFinite(current) || !Number.isFinite(previous)) return null;
+      return current - previous;
+    }
+
+    function todayEntry() {
+      return (state.patientEvolution || []).find(x => x.dateKey === todayKey()) || null;
+    }
+
+    function moodLabel(value) {
+      return ({1:'Muito mal',2:'Mal',3:'Ok',4:'Bem',5:'Muito bem'})[Number(value)] || '—';
+    }
+
+    function adherenceLabel(value) {
+      return ({1:'Quase nada',2:'Pouco',3:'Parcial',4:'Quase tudo',5:'Completamente'})[Number(value)] || '—';
+    }
+
+    function clearReminderTimers() {
+      state.notificationTimerIds.forEach(id => clearTimeout(id));
+      state.notificationTimerIds = [];
+    }
+
+    function minutesFromHHMM(value) {
+      if (!value || !/^\d{2}:\d{2}$/.test(value)) return null;
+      const [h,m] = value.split(':').map(Number);
+      return Number.isFinite(h) && Number.isFinite(m) ? h*60+m : null;
+    }
+
+    function scheduleDailyCheckinPrompt() {
+      if (!isPatient() || !state.patientProfile) return;
+      const cfg = state.patientProfile.reminders?.dailyCheckin || {};
+      const time = cfg.time || DEFAULT_CHECKIN_TIME;
+      const target = minutesFromHHMM(time);
+      if (!cfg.enabled || target === null || todayEntry()) return;
+      const now = new Date();
+      const current = now.getHours()*60 + now.getMinutes();
+      if (current >= target) {
+        showDailyCheckinPrompt();
+        return;
+      }
+      const ms = (target-current)*60*1000 - now.getSeconds()*1000;
+      state.notificationTimerIds.push(setTimeout(() => {
+        if (!todayEntry()) {
+          showDailyCheckinPrompt();
+          showBrowserNotification('Seu check-in está esperando por você', 'Preencha seu dia no MedCare.');
+        }
+      }, Math.max(1000, ms)));
+    }
+
+    function showDailyCheckinPrompt() {
+      if (!isPatient() || todayEntry()) return;
+      const key = `medcare:checkinPrompt:${uid()}:${todayKey()}`;
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, '1');
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 z-[950] grid place-items-center p-5';
+      modal.innerHTML = `
+        <div class="absolute inset-0 bg-slate-950/35 backdrop-blur-[2px]" data-close></div>
+        <section class="relative card w-full max-w-md p-6 sm:p-7 fade-in">
+          <button class="absolute right-4 top-4 p-2 rounded-xl hover:bg-slate-100" data-close>${icon('x',20)}</button>
+          <div class="h-12 w-12 rounded-2xl grid place-items-center mb-4" style="background:var(--brand-soft);color:var(--brand)">${icon('heart',24)}</div>
+          <div class="text-xs font-black tracking-[.18em] text-slate-400 uppercase">Seu check-in diário</div>
+          <h3 class="text-2xl font-black mt-2">Como foi o seu dia?</h3>
+          <p class="mt-2 text-sm text-slate-500 leading-6">Leva menos de um minuto. Seu médico usa essas informações para acompanhar sua evolução.</p>
+          <div class="grid grid-cols-5 gap-2 mt-5">
+            ${['😞','😕','😐','🙂','😄'].map((emoji,i)=>`<div class="rounded-2xl bg-slate-50 py-3 text-center text-2xl">${emoji}<div class="text-[9px] font-bold text-slate-400 mt-1">${i+1}</div></div>`).join('')}
+          </div>
+          <button class="btn-primary w-full mt-6" data-open-checkin>${icon('arrow',18)} Preencher agora</button>
+          <button class="btn-secondary w-full mt-2" data-close>Agora não</button>
+        </section>`;
+      modal.addEventListener('click', e => {
+        if (e.target.closest('[data-open-checkin]')) { modal.remove(); state.currentView = 'home'; renderApp(); setTimeout(() => document.getElementById('daily-checkin-card')?.scrollIntoView({behavior:'smooth', block:'start'}), 80); }
+        else if (e.target.closest('[data-close]')) modal.remove();
+      });
+      document.body.appendChild(modal);
+    }
+
+    function showBrowserNotification(title, body) {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      try { new Notification(title, { body, icon: './icons/icon-192.png', tag: 'medcare-reminder' }); } catch {}
+    }
+
+    function maybeScheduleBrowserNotification(time, title, body) {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+      const now = new Date();
+      const target = new Date();
+      const [h,m] = time.split(':').map(Number);
+      target.setHours(h,m,0,0);
+      if (target <= now) return showBrowserNotification(title, body);
+      state.notificationTimerIds.push(setTimeout(() => showBrowserNotification(title, body), target-now));
+    }
+
+    async function requestPatientNotifications() {
+      if (!('Notification' in window)) return toast('Seu navegador não oferece notificações web.', 'warning');
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        toast('Notificações ativadas neste dispositivo.');
+        scheduleDailyCheckinPrompt();
+      } else {
+        toast('As notificações foram bloqueadas pelo navegador.', 'warning');
+      }
+      renderPatient();
+    }
+
+    function patientPermissionLabel() {
+      if (!('Notification' in window)) return 'Não suportadas';
+      if (Notification.permission === 'granted') return 'Ativadas';
+      if (Notification.permission === 'denied') return 'Bloqueadas';
+      return 'Desativadas';
+    }
+
+    function toast(message, type = 'success') {
+      const bg = type === 'error' ? '#b91c1c' : type === 'warning' ? '#b45309' : '#15803d';
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.style.background = bg;
+      el.innerHTML = `<div class="flex items-center gap-3"><span class="text-lg">${type === 'error' ? '!' : type === 'warning' ? '⚠' : '✓'}</span><span>${escapeHTML(message)}</span></div>`;
+      toastRoot.replaceChildren(el);
+      window.setTimeout(() => el.remove(), 3400);
+    }
+
+    function icon(name, size = 20) {
+      const paths = {
+        home: '<path d="M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+        people: '<path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M17 8a4 4 0 0 1 0 8M21 21v-2a4 4 0 0 0-3-3.87"/>',
+        chart: '<path d="M4 19V5M4 19h17"/><rect x="7" y="11" width="3" height="5" rx="1"/><rect x="12" y="8" width="3" height="8" rx="1"/><rect x="17" y="4" width="3" height="12" rx="1"/>',
+        bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/>',
+        logout: '<path d="M10 17l5-5-5-5"/><path d="M15 12H3"/><path d="M21 19V5a2 2 0 0 0-2-2h-6"/>',
+        search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+        arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
+        back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
+        plus: '<path d="M12 5v14M5 12h14"/>',
+        save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/>',
+        user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c.7-4 3.3-6 8-6s7.3 2 8 6"/>',
+        droplet: '<path d="M12 3C9 7 6 10 6 14a6 6 0 0 0 12 0c0-4-3-7-6-11z"/>',
+        clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        check: '<path d="m5 12 4 4L19 6"/>',
+        info: '<circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/>',
+        menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+        x: '<path d="m6 6 12 12M18 6 6 18"/>',
+        help: '<circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.4 2.4 0 1 1 4.1 1.7c-.9.9-1.8 1.2-1.8 2.8"/><path d="M12 17h.01"/>',
+        google: '<path d="M21.35 12.2c0-.7-.06-1.35-.2-1.98H12v3.75h5.24a4.48 4.48 0 0 1-1.94 2.94v2.44h3.15c1.85-1.7 2.9-4.2 2.9-7.15Z"/><path d="M12 21.6c2.65 0 4.88-.88 6.5-2.37l-3.15-2.44c-.88.59-2 .94-3.35.94-2.57 0-4.75-1.74-5.53-4.08H3.22v2.52A9.82 9.82 0 0 0 12 21.6Z"/><path d="M6.47 13.65A5.9 5.9 0 0 1 6.16 12c0-.57.1-1.12.31-1.65V7.83H3.22A9.8 9.8 0 0 0 2.2 12c0 1.58.38 3.07 1.02 4.17l3.25-2.52Z"/><path d="M12 6.27c1.45 0 2.75.5 3.77 1.47l2.83-2.76C16.88 3.37 14.65 2.4 12 2.4a9.82 9.82 0 0 0-8.78 5.43l3.25 2.52C7.25 8.01 9.43 6.27 12 6.27Z"/>',
+        scale: '<path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5M8 17h8"/>',
+        activity: '<path d="M3 12h4l2-6 4 12 2-6h6"/>',
+        moon: '<path d="M20.5 14.5A8 8 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"/>',
+        target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/>',
+        heart: '<path d="M20.8 8.9c0 5.3-8.8 10.3-8.8 10.3S3.2 14.2 3.2 8.9A4.7 4.7 0 0 1 12 6.2a4.7 4.7 0 0 1 8.8 2.7Z"/>'
+      };
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.info}</svg>`;
+    }
+
+    function loadingScreen(text = 'Carregando…') {
+      appEl.innerHTML = `
+        <main class="min-h-screen grid place-items-center p-6">
+          <div class="text-center">
+            <div class="mx-auto mb-4 h-14 w-14 rounded-2xl grid place-items-center text-white shadow-lg" style="background:var(--brand)">${icon('droplet', 28)}</div>
+            <div class="h-2 w-40 rounded-full skeleton mx-auto mb-3"></div>
+            <p class="text-sm text-slate-500">${escapeHTML(text)}</p>
+          </div>
+        </main>`;
+    }
+
+    // ------------------------------------------------------------
+    // Firebase
+    // ------------------------------------------------------------
+    async function initFirebase() {
+      if (!configIsValid()) {
+        renderConfigError();
+        return;
+      }
+
+      try {
+        const firebaseApp = initializeApp(FIREBASE_CONFIG);
+        state.auth = getAuth(firebaseApp);
+        await setPersistence(state.auth, browserLocalPersistence);
+
+        // Firestore offline-first usando a API moderna de cache persistente.
+        // A documentação atual recomenda persistentLocalCache() em vez da antiga
+        // enableIndexedDbPersistence(). O modo single-tab reduz conflitos entre abas.
+        try {
+          state.db = initializeFirestore(firebaseApp, {
+            localCache: persistentLocalCache({
+              tabManager: persistentSingleTabManager()
+            })
+          });
+          state.persistenceEnabled = true;
+        } catch (error) {
+          console.warn('Cache persistente indisponível, usando cache em memória:', error);
+          try {
+            state.db = getFirestore(firebaseApp);
+          } catch (fallbackError) {
+            throw fallbackError;
+          }
+          state.persistenceEnabled = false;
+        }
+
+        state.firebaseReady = true;
+        setupAuthObserver();
+      } catch (error) {
+        console.error(error);
+        renderConfigError('Não foi possível inicializar o Firebase. Revise a configuração no topo do arquivo.');
+      }
+    }
+
+    function setupAuthObserver() {
+      onAuthStateChanged(state.auth, async (user) => {
+        cleanupListeners();
+        clearReminderTimers();
+        state.user = user;
+        state.role = null;
+        state.userProfile = null;
+        state.patientProfile = null;
+        state.patients = [];
+        state.selectedPatient = null;
+        state.selectedPatientEvolution = [];
+
+        if (!user) {
+          renderAuth();
+          return;
+        }
+
+        const passwordProvider = user.providerData?.some(p => p.providerId === 'password');
+        if (passwordProvider && !user.emailVerified) {
+          renderEmailVerification();
+          return;
+        }
+
+        loadingScreen('Sincronizando seu perfil…');
+        try {
+          await ensureUserProfile(user);
+          await loadUserContext();
+          renderApp();
+          scheduleDailyCheckinPrompt();
+          scheduleHydrationNotifications();
+          syncNow();
+        } catch (error) {
+          console.error(error);
+          renderProfileError(error);
+        }
+      });
+    }
+
+    async function ensureUserProfile(user) {
+      const ref = doc(state.db, 'users', user.uid);
+      const snap = await readDocSmart(ref);
+      if (snap.exists()) {
+        if (!snap.data()?.role) {
+          await setDoc(ref, { email: user.email || '', displayName: user.displayName || '', role: 'patient', updatedAt: serverTimestamp() }, { merge: true });
+        }
+        const patientRef = doc(state.db, 'patients', user.uid);
+        const ps = await readDocSmart(patientRef);
+        if (!ps.exists() && (snap.data()?.role || 'patient') === 'patient') {
+          await createInitialPatient(user);
+        }
+        return;
+      }
+      await setDoc(ref, {
+        email: user.email || '',
+        displayName: user.displayName || user.email?.split('@')[0] || 'Paciente',
+        role: 'patient',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      await createInitialPatient(user);
+    }
+
+    async function createInitialPatient(user) {
+      await setDoc(doc(state.db, 'patients', user.uid), {
+        name: user.displayName || user.email?.split('@')[0] || 'Paciente',
+        email: user.email || '',
+        dateOfBirth: null,
+        sex: '',
+        heightCm: null,
+        targetWeight: null,
+        currentWeight: null,
+        waistCm: null,
+        hipCm: null,
+        bodyFatPct: null,
+        muscleMassKg: null,
+        activityLevel: 'Moderado',
+        dietaryPattern: '',
+        allergies: '',
+        intolerances: '',
+        healthConditions: '',
+        medicationsSupplements: '',
+        previousDiets: '',
+        restrictions: '',
+        objective: 'Emagrecimento',
+        doctorId: null,
+        alerts: [],
+        reminders: { dailyCheckin: { enabled: true, time: DEFAULT_CHECKIN_TIME, askWeight: true } },
+        recommendations: 'Siga as orientações definidas pelo seu médico.',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: false });
+    }
+
+    async function loadUserContext() {
+      const userRef = doc(state.db, 'users', uid());
+      const snap = await readDocSmart(userRef);
+      if (!snap.exists()) {
+        throw new Error('Perfil do usuário não encontrado no Firestore.');
+      }
+      state.userProfile = snap.data();
+      state.role = state.userProfile.role;
+
+      if (!['patient', 'doctor', 'nutritionist'].includes(state.role)) {
+        throw new Error('Perfil sem função válida.');
+      }
+
+      if (isPatient()) {
+        await refreshPatientData();
+      } else {
+        await refreshDoctorPatients();
+      }
+    }
+
+    async function readDocSmart(ref) {
+      if (!navigator.onLine) return getDocFromCache(ref);
+      try {
+        return await getDocFromServer(ref);
+      } catch (serverError) {
+        console.warn('Leitura do servidor falhou; usando cache local.', serverError);
+        return getDocFromCache(ref);
+      }
+    }
+
+    async function readQuerySmart(q) {
+      if (!navigator.onLine) return getDocsFromCache(q);
+      try {
+        return await getDocsFromServer(q);
+      } catch (serverError) {
+        console.warn('Consulta do servidor falhou; usando cache local.', serverError);
+        return getDocsFromCache(q);
+      }
+    }
+
+    async function refreshPatientData() {
+      if (!state.db || !uid()) return;
+      try {
+        const patientRef = doc(state.db, 'patients', uid());
+        const evolutionRef = collection(state.db, 'patients', uid(), 'evolution');
+        const evolutionQuery = query(evolutionRef, orderBy('dateKey', 'desc'), limit(30));
+        const [patientSnap, evolutionSnap] = await Promise.all([
+          readDocSmart(patientRef),
+          readQuerySmart(evolutionQuery)
+        ]);
+        state.patientProfile = patientSnap.exists() ? patientSnap.data() : null;
+        state.patientEvolution = evolutionSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderApp();
+      } catch (error) {
+        console.error('refreshPatientData:', error);
+        if (error?.code === 'failed-precondition' || /INTERNAL ASSERTION FAILED/i.test(error?.message || '')) {
+          throw error;
+        }
+        state.patientEvolution = [];
+        renderApp();
+      }
+    }
+
+    async function refreshDoctorPatients() {
+      if (!state.db || !uid()) return;
+      const patientsRef = collection(state.db, 'patients');
+      const assignedQ = query(patientsRef, where('doctorId', '==', uid()));
+      const unassignedQ = query(patientsRef, where('doctorId', '==', null));
+      try {
+        const [assignedSnap, unassignedSnap] = await Promise.all([
+          readQuerySmart(assignedQ),
+          readQuerySmart(unassignedQ)
+        ]);
+        state._assignedPatients = assignedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        state._unassignedPatients = unassignedSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        mergeDoctorPatients();
+      } catch (error) {
+        console.error('refreshDoctorPatients:', error);
+        throw error;
+      }
+    }
+
+    function mergeDoctorPatients() {
+      const map = new Map();
+      [...(state._assignedPatients || []), ...(state._unassignedPatients || [])]
+        .forEach(p => map.set(p.id, p));
+      state.patients = [...map.values()].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'));
+      renderApp();
+    }
+
+    async function refreshSelectedPatientEvolution(patientId) {
+      if (!patientId || !state.db) return;
+      try {
+        const evolutionRef = collection(state.db, 'patients', patientId, 'evolution');
+        const q = query(evolutionRef, orderBy('dateKey', 'desc'), limit(120));
+        const snap = await readQuerySmart(q);
+        state.selectedPatientEvolution = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderDoctor();
+      } catch (error) {
+        console.error('refreshSelectedPatientEvolution:', error);
+        state.selectedPatientEvolution = [];
+        renderDoctor();
+      }
+    }
+
+    function cleanupSelectedEvolutionListener() {
+      state.selectedEvolutionUnsub = null;
+    }
+
+    function cleanupListeners() {
+      state.listeners.forEach(fn => { try { fn(); } catch {} });
+      state.listeners = [];
+      cleanupSelectedEvolutionListener();
+    }
+
+    // ------------------------------------------------------------
+    // Sincronização
+    // ------------------------------------------------------------
+    async function syncNow() {
+      if (!state.firebaseReady || !state.db || !state.user || !navigator.onLine) return;
+      if (state.syncing) return;
+      state.syncing = true;
+      updateSyncIndicator();
+      try {
+        await waitForPendingWrites(state.db);
+        if (isPatient()) await refreshPatientData();
+        if (isDoctor()) await refreshDoctorPatients();
+        if (state.selectedPatient?.id) await refreshSelectedPatientEvolution(state.selectedPatient.id);
+        state.lastSyncAt = Date.now();
+        localStorage.setItem('medcare:lastSyncAt', String(state.lastSyncAt));
+      } catch (error) {
+        console.debug('Sync:', error?.code || error?.message || error);
+      } finally {
+        state.syncing = false;
+        updateSyncIndicator();
+      }
+    }
+
+    setInterval(() => {
+      // Melhor esforço: se o app permanecer aberto, tenta sincronizar pelo menos 1x/dia.
+      if (Date.now() - state.lastSyncAt >= 24 * 60 * 60 * 1000) syncNow();
+    }, 60 * 60 * 1000);
+
+    window.addEventListener('online', () => {
+      state.online = true;
+      updateSyncIndicator();
+      syncNow();
+      clearReminderTimers();
+      scheduleDailyCheckinPrompt();
+      scheduleHydrationNotifications();
+    });
+    window.addEventListener('offline', () => {
+      state.online = false;
+      updateSyncIndicator();
+    });
+
+    function updateSyncIndicator() {
+      const el = document.getElementById('sync-indicator');
+      if (!el) return;
+      if (!navigator.onLine) {
+        el.innerHTML = `<span class="inline-flex items-center gap-2 text-amber-700">● Offline</span>`;
+        return;
+      }
+      if (state.syncing) {
+        el.innerHTML = `<span class="inline-flex items-center gap-2 text-slate-500"><span class="animate-pulse">●</span> Sincronizando…</span>`;
+        return;
+      }
+      el.innerHTML = `<span class="inline-flex items-center gap-2 text-emerald-700">● Sincronizado</span>`;
+    }
+
+    // ------------------------------------------------------------
+    // PWA
+    // ------------------------------------------------------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
+          .then(() => console.debug('Service Worker ativo.'))
+          .catch(err => console.warn('Service Worker:', err));
+      });
+    }
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();
+      state.installPrompt = event;
+      renderApp();
+    });
+
+    async function installPWA() {
+      if (!state.installPrompt) {
+        showIOSInstallHelp();
+        return;
+      }
+      state.installPrompt.prompt();
+      await state.installPrompt.userChoice;
+      state.installPrompt = null;
+      renderApp();
+    }
+
+    function showIOSInstallHelp() {
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone;
+      if (!isIOS || isStandalone) {
+        toast('Use o menu do navegador para instalar este site.', 'warning');
+        return;
+      }
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 z-[900] grid place-items-center p-5';
+      modal.innerHTML = `
+        <div class="absolute inset-0 bg-slate-950/35" data-close></div>
+        <section class="relative card w-full max-w-md p-6 fade-in">
+          <button class="absolute right-4 top-4 p-2 rounded-xl hover:bg-slate-100" data-close>${icon('x', 20)}</button>
+          <div class="h-12 w-12 rounded-2xl grid place-items-center mb-4" style="background:var(--brand-soft);color:var(--brand)">${icon('plus', 24)}</div>
+          <h3 class="text-xl font-bold">Adicionar ao iPhone</h3>
+          <p class="mt-2 text-sm text-slate-600 leading-6">No Safari, toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>.</p>
+          <button class="btn-primary w-full mt-5" data-close>Entendi</button>
+        </section>`;
+      modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) modal.remove(); });
+      document.body.appendChild(modal);
+    }
+
+    // ------------------------------------------------------------
+    // Autenticação
+    // ------------------------------------------------------------
+    function renderConfigError(message = 'Cole as credenciais do Firebase no bloco indicado no topo do script.') {
+      appEl.innerHTML = `
+        <main class="min-h-screen grid place-items-center p-5">
+          <section class="card w-full max-w-xl p-7 md:p-10">
+            <div class="h-14 w-14 rounded-2xl grid place-items-center text-white mb-5" style="background:var(--brand)">${icon('droplet', 30)}</div>
+            <h1 class="text-2xl font-extrabold">Configuração necessária</h1>
+            <p class="mt-2 text-slate-600 leading-6">${escapeHTML(message)}</p>
+            <pre class="mt-5 rounded-2xl bg-slate-950 text-slate-200 p-4 overflow-auto text-xs leading-5">const FIREBASE_CONFIG = {
+  apiKey: "...",
+  authDomain: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+};</pre>
+            <p class="mt-4 text-xs text-slate-500">Depois de salvar o arquivo e publicar no GitHub Pages, recarregue esta página.</p>
+          </section>
+        </main>`;
+    }
+
+    function renderProfileError(error) {
+      const internalFirestore = /INTERNAL ASSERTION FAILED/i.test(error?.message || '');
+      appEl.innerHTML = `
+        <main class="min-h-screen grid place-items-center p-5">
+          <section class="card w-full max-w-xl p-7 md:p-10 text-center">
+            <div class="mx-auto h-14 w-14 rounded-2xl grid place-items-center bg-red-50 text-red-700 mb-5">${icon('info', 28)}</div>
+            <h1 class="text-2xl font-extrabold">Perfil não configurado</h1>
+            <p class="mt-2 text-slate-600 leading-6">${internalFirestore ? 'O Firestore entrou em um estado interno inválido. O cache local antigo pode estar corrompido; limpe os dados deste site uma vez e recarregue.' : escapeHTML(error?.message || 'Verifique o documento users/{uid} no Firestore.')}</p>
+            ${internalFirestore ? '<button id="clear-firestore-cache" class="btn-primary mt-5">Limpar cache do aplicativo</button>' : ''}
+            <button id="logout-profile" class="btn-secondary mt-3">${icon('logout',18)} Sair</button>
+          </section>
+        </main>`;
+      document.getElementById('clear-firestore-cache')?.addEventListener('click', async () => {
+        try {
+          localStorage.clear();
+          sessionStorage.clear();
+          const names = await indexedDB.databases?.() || [];
+          for (const db of names) {
+            if (db.name && /firestore|firebase/i.test(db.name)) indexedDB.deleteDatabase(db.name);
+          }
+        } catch (e) { console.warn('Limpeza de cache:', e); }
+        location.reload();
+      });
+      document.getElementById('logout-profile')?.addEventListener('click', () => signOut(state.auth));
+    }
+
+    function renderEmailVerification() {
+      appEl.innerHTML = `
+        <main class="min-h-screen grid place-items-center p-5">
+          <section class="card w-full max-w-lg p-7 sm:p-9 text-center">
+            <div class="mx-auto h-14 w-14 rounded-2xl grid place-items-center text-white mb-5" style="background:var(--brand)">${icon('check',28)}</div>
+            <div class="text-xs font-black tracking-[.18em] text-slate-400 uppercase">Quase lá</div>
+            <h1 class="text-3xl font-black mt-2">Confirme seu e-mail</h1>
+            <p class="mt-3 text-slate-500 leading-6">Enviamos um link de confirmação para <b>${escapeHTML(state.user?.email || '')}</b>. Confirme o endereço e depois volte para cá.</p>
+            <div class="grid sm:grid-cols-2 gap-2 mt-6">
+              <button id="resend-verification" class="btn-primary">${icon('arrow',18)} Reenviar e-mail</button>
+              <button id="refresh-verification" class="btn-secondary">${icon('check',18)} Já confirmei</button>
+            </div>
+            <button id="logout-verification" class="w-full mt-3 text-sm font-bold text-slate-500 hover:text-slate-900">Sair desta conta</button>
+          </section>
+        </main>`;
+      document.getElementById('resend-verification')?.addEventListener('click', async () => {
+        try { await sendEmailVerification(state.user); toast('Novo e-mail de confirmação enviado.'); }
+        catch (error) { toast(firebaseErrorMessage(error), 'error'); }
+      });
+      document.getElementById('refresh-verification')?.addEventListener('click', async () => {
+        try {
+          await reload(state.user);
+          if (state.user.emailVerified) location.reload();
+          else toast('Ainda não consta como confirmado. Abra o link do e-mail e tente novamente.', 'warning');
+        } catch (error) { toast(firebaseErrorMessage(error), 'error'); }
+      });
+      document.getElementById('logout-verification')?.addEventListener('click', () => signOut(state.auth));
+    }
+
+    function renderAuth() {
+      const login = state.authMode === 'login';
+      appEl.innerHTML = `
+        <main class="min-h-screen grid lg:grid-cols-[1.05fr_.95fr]">
+          <section class="hidden lg:flex relative overflow-hidden p-12 bg-slate-950 text-white">
+            <div class="absolute inset-0 opacity-30" style="background:radial-gradient(circle at 20% 15%, rgba(32,170,146,.75), transparent 35%),radial-gradient(circle at 80% 85%, rgba(32,170,146,.25), transparent 30%)"></div>
+            <div class="relative max-w-xl self-center">
+              <div class="h-14 w-14 rounded-2xl grid place-items-center mb-7 bg-white/10 border border-white/10">${icon('droplet',30)}</div>
+              <span class="badge bg-white/10 text-white">MEDCARE</span>
+              <h1 class="mt-5 text-5xl font-black leading-tight">Cuidado contínuo.<br>Sem complicação.</h1>
+              <p class="mt-5 text-slate-300 text-lg leading-8">Um ambiente profissional para acompanhamento médico, evolução, hábitos e rotina — com dados acessíveis também offline.</p>
+              <div class="mt-10 grid grid-cols-3 gap-3">
+                <div class="rounded-2xl border border-white/10 bg-white/5 p-4"><div class="text-xl">⌁</div><div class="mt-2 text-sm text-slate-300">Offline-first</div></div>
+                <div class="rounded-2xl border border-white/10 bg-white/5 p-4"><div class="text-xl">✓</div><div class="mt-2 text-sm text-slate-300">Acesso por função</div></div>
+                <div class="rounded-2xl border border-white/10 bg-white/5 p-4"><div class="text-xl">↗</div><div class="mt-2 text-sm text-slate-300">PWA instalável</div></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid place-items-center p-5 sm:p-8">
+            <div class="w-full max-w-md">
+              <div class="lg:hidden mb-8">
+                <div class="h-13 w-13 rounded-2xl grid place-items-center text-white mb-4" style="width:52px;height:52px;background:var(--brand)">${icon('droplet',28)}</div>
+                <div class="text-xs font-black tracking-[.22em] text-slate-500">MEDCARE</div>
+                <h1 class="text-3xl font-black mt-2">Seu acompanhamento.</h1>
+              </div>
+
+              <div class="mb-6 flex p-1 rounded-2xl bg-slate-100">
+                <button data-auth-mode="login" class="flex-1 rounded-xl py-3 text-sm font-bold ${login ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}">Entrar</button>
+                <button data-auth-mode="signup" class="flex-1 rounded-xl py-3 text-sm font-bold ${!login ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}">Criar conta</button>
+              </div>
+
+              <section class="card p-6 sm:p-8">
+                <div class="mb-6">
+                  <div class="text-xs font-extrabold tracking-[.16em] text-slate-500">${login ? 'BEM-VINDO DE VOLTA' : 'PRIMEIRO ACESSO'}</div>
+                  <h2 class="text-2xl font-black mt-2">${login ? 'Acesse sua conta' : 'Crie sua conta de paciente'}</h2>
+                  <p class="mt-2 text-sm text-slate-500">${login ? 'Entre com e-mail e senha ou use sua conta Google.' : 'O cadastro público cria uma conta de paciente. O e-mail precisa ser confirmado antes do primeiro acesso.'}</p>
+                </div>
+
+                ${login ? `<button id="google-login" class="btn-secondary w-full !min-h-12">${icon('google',19)} Continuar com Google</button>` : ''}
+                ${login ? `<div class="flex items-center gap-3 my-4"><div class="h-px bg-slate-200 flex-1"></div><span class="text-xs font-bold text-slate-400">OU E-MAIL</span><div class="h-px bg-slate-200 flex-1"></div></div>` : ''}
+
+                <form id="auth-form" class="space-y-4">
+                  ${!login ? `<div><label class="block text-sm font-bold mb-2">Nome</label><input class="field" name="name" required autocomplete="name" placeholder="Seu nome completo" /></div>` : ''}
+                  <div><label class="block text-sm font-bold mb-2">E-mail</label><input class="field" name="email" required type="email" autocomplete="email" placeholder="voce@exemplo.com" /></div>
+                  <div><label class="block text-sm font-bold mb-2">Senha</label><input class="field" name="password" required type="password" minlength="6" autocomplete="current-password" placeholder="Mínimo de 6 caracteres" /></div>
+                  ${!login ? `<div><label class="block text-sm font-bold mb-2">Confirmar senha</label><input class="field" name="password2" required type="password" minlength="6" autocomplete="new-password" placeholder="Repita a senha" /></div>` : ''}
+                  <button class="btn-primary w-full" type="submit" id="auth-submit">${login ? icon('arrow',18) + ' Entrar' : icon('plus',18) + ' Criar conta'}</button>
+                </form>
+
+                ${login ? `<button id="forgot-password" class="mt-4 w-full text-sm font-bold text-slate-500 hover:text-slate-900">Esqueci minha senha</button>` : `<div class="mt-4 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-xs leading-5 text-slate-500">O e-mail de confirmação é obrigatório. Depois de confirmá-lo, basta voltar ao app e entrar normalmente.</div>`}
+              </section>
+              <p class="mt-5 text-center text-xs text-slate-400">Seus dados são protegidos por autenticação e regras do Firestore; o aplicativo também mantém cache local para uso offline.</p>
+            </div>
+          </section>
+        </main>`;
+
+      document.querySelectorAll('[data-auth-mode]').forEach(btn => btn.addEventListener('click', () => { state.authMode = btn.dataset.authMode; renderAuth(); }));
+      document.getElementById('auth-form')?.addEventListener('submit', handleAuthSubmit);
+      document.getElementById('forgot-password')?.addEventListener('click', handleForgotPassword);
+      document.getElementById('google-login')?.addEventListener('click', handleGoogleLogin);
+    }
+
+    async function handleGoogleLogin() {
+      try {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        const mobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
+        if (mobile) await signInWithRedirect(state.auth, provider);
+        else await signInWithPopup(state.auth, provider);
+      } catch (error) {
+        toast(firebaseErrorMessage(error), 'error');
+      }
+    }
+
+    async function handleAuthSubmit(event) {
+      event.preventDefault();
+      if (!state.auth) return;
+      const form = new FormData(event.currentTarget);
+      const email = String(form.get('email') || '').trim().toLowerCase();
+      const password = String(form.get('password') || '');
+      const submit = document.getElementById('auth-submit');
+      submit.disabled = true; submit.textContent = 'Aguarde…';
+      try {
+        if (state.authMode === 'login') {
+          await signInWithEmailAndPassword(state.auth, email, password);
+          toast('Login realizado.');
+        } else {
+          const name = String(form.get('name') || '').trim();
+          const password2 = String(form.get('password2') || '');
+          if (!name) throw new Error('Informe seu nome.');
+          if (password !== password2) throw new Error('As senhas não coincidem.');
+          const cred = await createUserWithEmailAndPassword(state.auth, email, password);
+          await updateProfile(cred.user, { displayName: name });
+          await createInitialPatient({ ...cred.user, displayName: name, email });
+          await setDoc(doc(state.db, 'users', cred.user.uid), { email, displayName: name, role: 'patient', createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+          await sendEmailVerification(cred.user);
+          renderEmailVerification();
+          toast('Conta criada. Confirme o e-mail para continuar.');
+        }
+      } catch (error) {
+        toast(firebaseErrorMessage(error), 'error');
+        submit.disabled = false; submit.textContent = state.authMode === 'login' ? 'Entrar' : 'Criar conta';
+      }
+    }
+
+    async function handleForgotPassword() {
+      const email = window.prompt('Informe o e-mail da conta:');
+      if (!email) return;
+      try {
+        await sendPasswordResetEmail(state.auth, email.trim().toLowerCase());
+        toast('Enviamos o link de recuperação para o e-mail.');
+      } catch (error) {
+        toast(firebaseErrorMessage(error), 'error');
+      }
+    }
+
+    function firebaseErrorMessage(error) {
+      const map = {
+        'auth/invalid-credential': 'E-mail ou senha incorretos.',
+        'auth/invalid-email': 'O e-mail informado é inválido.',
+        'auth/email-already-in-use': 'Este e-mail já está cadastrado.',
+        'auth/weak-password': 'A senha precisa ter pelo menos 6 caracteres.',
+        'auth/network-request-failed': 'Sem conexão. Tente novamente quando estiver online.',
+        'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos.',
+        'auth/popup-blocked': 'O navegador bloqueou a janela do Google. Tente novamente ou permita pop-ups.',
+        'auth/popup-closed-by-user': 'A janela do Google foi fechada antes do login terminar.',
+        'auth/account-exists-with-different-credential': 'Já existe uma conta com este e-mail usando outro método de login. Entre pelo método original.'
+      };
+      return map[error?.code] || error?.message || 'Ocorreu um erro. Tente novamente.';
+    }
+
+    // ------------------------------------------------------------
+    // Layout principal
+    // ------------------------------------------------------------
+    function renderApp() {
+      if (!state.user || !state.role) return;
+      appEl.innerHTML = `
+        <div class="min-h-screen pb-20 lg:pb-0">
+          <header class="sticky top-0 z-40 border-b border-slate-200/70 glass">
+            <div class="max-w-[1440px] mx-auto px-4 sm:px-6 h-[72px] flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="h-10 w-10 rounded-2xl grid place-items-center text-white shrink-0" style="background:var(--brand)">${icon('droplet', 22)}</div>
+                <div class="min-w-0">
+                  <div class="font-black leading-none">MEDCARE</div>
+                  <div class="text-xs text-slate-500 mt-1 truncate">${isDoctor() ? 'Painel do médico' : 'Seu acompanhamento'}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div id="sync-indicator" class="hidden sm:block text-xs font-bold">${state.online ? '● Online' : '● Offline'}</div>
+                ${state.installPrompt || (/iphone|ipad|ipod/i.test(navigator.userAgent) && !(window.navigator.standalone || window.matchMedia?.('(display-mode: standalone)').matches)) ? `<button id="install-pwa" class="btn-secondary !min-h-10 !py-2 !px-3 text-xs">+ Instalar</button>` : ''}
+                <div class="hidden sm:flex items-center gap-2 rounded-2xl bg-white border border-slate-200 pl-2 pr-3 py-1.5">
+                  <div class="h-8 w-8 rounded-xl grid place-items-center bg-slate-100 text-slate-600">${icon('user', 17)}</div>
+                  <div class="max-w-40 truncate">
+                    <div class="text-sm font-bold truncate">${escapeHTML(state.userProfile?.displayName || state.user?.email || '')}</div>
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider">${isDoctor() ? 'Médico' : 'Paciente'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div class="max-w-[1440px] mx-auto lg:grid lg:grid-cols-[230px_1fr]">
+            <aside class="desktop-only border-r border-slate-200/70 p-4 min-h-[calc(100vh-73px)]">
+              <nav class="space-y-2 pt-2">
+                ${navButton('home', 'Início', 'home')}
+                ${isDoctor() ? navButton('patients', 'Pacientes', 'people') : navButton('evolution', 'Minha evolução', 'chart')}
+                ${navButton('help', 'Ajuda', 'help')}
+                <button id="logout-btn" class="nav-item text-red-700 hover:bg-red-50 mt-6">${icon('logout', 19)} Sair</button>
+              </nav>
+            </aside>
+
+            <main id="main-content" class="p-4 sm:p-6 lg:p-8 min-w-0"></main>
+          </div>
+
+          <nav class="mobile-only fixed bottom-0 inset-x-0 z-40 border-t border-slate-200/80 bg-white/95 backdrop-blur px-2 bottom-nav">
+            <div class="max-w-xl mx-auto grid grid-cols-4 gap-1 py-2">
+              ${mobileNavButton('home', 'Início', 'home')}
+              ${isDoctor() ? mobileNavButton('patients', 'Pacientes', 'people') : mobileNavButton('evolution', 'Evolução', 'chart')}
+              ${mobileNavButton('help', 'Ajuda', 'help')}
+              <button id="logout-btn-mobile" class="nav-item !justify-center flex-col !gap-1 !px-2 !py-2 text-xs">${icon('logout', 19)}<span>Sair</span></button>
+            </div>
+          </nav>
+        </div>`;
+
+      document.getElementById('logout-btn')?.addEventListener('click', () => signOut(state.auth));
+      document.getElementById('logout-btn-mobile')?.addEventListener('click', () => signOut(state.auth));
+      document.getElementById('install-pwa')?.addEventListener('click', installPWA);
+      document.querySelectorAll('[data-nav]').forEach(btn => btn.addEventListener('click', () => {
+        state.currentView = btn.dataset.nav;
+        renderApp();
+      }));
+      updateSyncIndicator();
+      renderMainContent();
+    }
+
+    function navButton(id, label, iconName) {
+      return `<button class="nav-item ${state.currentView === id ? 'active' : ''}" data-nav="${id}">${icon(iconName, 19)}<span>${label}</span></button>`;
+    }
+    function mobileNavButton(id, label, iconName) {
+      return `<button class="nav-item !justify-center flex-col !gap-1 !px-2 !py-2 text-xs ${state.currentView === id ? 'active' : ''}" data-nav="${id}">${icon(iconName, 19)}<span>${label}</span></button>`;
+    }
+
+    function renderMainContent() {
+      if (state.currentView === 'help') renderHelp();
+      else if (isDoctor()) renderDoctor();
+      else renderPatient();
+    }
+
+    function renderDoctor() {
+      const content = document.getElementById('main-content');
+      if (!content) return;
+      if (state.currentView === 'home') content.innerHTML = doctorHomeHTML();
+      if (state.currentView === 'patients') content.innerHTML = doctorPatientsHTML();
+      bindDoctorEvents();
+    }
+
+    function renderPatient() {
+      const content = document.getElementById('main-content');
+      if (!content) return;
+      if (state.currentView === 'home') content.innerHTML = patientHomeHTML();
+      if (state.currentView === 'evolution') content.innerHTML = patientEvolutionHTML();
+      bindPatientEvents();
+    }
+
+    // ------------------------------------------------------------
+    // Médico — HTML
+    // ------------------------------------------------------------
+    function doctorHomeHTML() {
+      const assigned = state.patients.filter(p => p.doctorId === uid()).length;
+      const unassigned = state.patients.filter(p => !p.doctorId).length;
+      const recent = state.patients.slice(0, 5);
+      return `
+        <section class="fade-in max-w-6xl mx-auto">
+          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <div class="text-xs font-black tracking-[.18em] text-slate-500 uppercase">Visão geral</div>
+              <h1 class="text-3xl sm:text-4xl font-black mt-2">Olá, ${escapeHTML((state.userProfile?.displayName || 'Médico').split(' ')[0])}.</h1>
+              <p class="mt-2 text-slate-500">Acompanhe os pacientes e mantenha as orientações em um só lugar.</p>
+            </div>
+            <button class="btn-primary" data-action="go-patients">${icon('people',18)} Gerenciar pacientes</button>
+          </div>
+
+          <div class="grid sm:grid-cols-3 gap-4 mt-7">
+            ${statCard('Pacientes vinculados', assigned, 'people')}
+            ${statCard('Aguardando vínculo', unassigned, 'clock')}
+            ${statCard('Modo atual', state.online ? 'Online' : 'Offline', state.online ? 'check' : 'info')}
+          </div>
+
+          <div class="grid lg:grid-cols-[1.25fr_.75fr] gap-5 mt-5">
+            <section class="card p-5 sm:p-6">
+              <div class="flex items-center justify-between gap-3">
+                <div><h2 class="text-lg font-black">Pacientes recentes</h2><p class="text-sm text-slate-500 mt-1">Clique em um paciente para abrir o acompanhamento.</p></div>
+                <button class="btn-secondary !min-h-10 !py-2 !px-3 text-sm" data-action="go-patients">Ver todos</button>
+              </div>
+              <div class="mt-5 space-y-2">
+                ${recent.length ? recent.map(patientListRow).join('') : emptyState('Nenhum paciente disponível', 'Assim que uma conta de paciente for criada, ela aparecerá aqui.', 'people')}
+              </div>
+            </section>
+            <section class="card p-5 sm:p-6">
+              <div class="flex items-start gap-3">
+                <div class="h-11 w-11 rounded-2xl grid place-items-center" style="background:var(--brand-soft);color:var(--brand)">${icon('info',22)}</div>
+                <div><h2 class="text-lg font-black">Como funciona</h2><p class="text-sm leading-6 text-slate-500 mt-1">O paciente registra peso, altura e observações. Você define objetivo, restrições, recomendações e alertas.</p></div>
+              </div>
+              <div class="mt-5 rounded-2xl bg-slate-50 border border-slate-100 p-4 text-sm text-slate-600 leading-6">
+                <b>Offline:</b> alterações locais continuam no dispositivo e o Firestore tenta sincronizar quando a conexão voltar.
+              </div>
+            </section>
+          </div>
+        </section>`;
+    }
+
+    function statCard(label, value, iconName) {
+      return `<div class="card p-5"><div class="flex items-center gap-3"><div class="h-11 w-11 rounded-2xl bg-slate-100 grid place-items-center text-slate-600">${icon(iconName,21)}</div><div><div class="text-xs font-bold text-slate-400 uppercase tracking-wider">${escapeHTML(label)}</div><div class="text-2xl font-black mt-1">${escapeHTML(value)}</div></div></div></div>`;
+    }
+
+    function patientListRow(p) {
+      return `<button data-patient-id="${escapeHTML(p.id)}" class="w-full text-left rounded-2xl border border-slate-100 hover:border-slate-200 hover:bg-slate-50 p-3 flex items-center gap-3 transition">
+        <div class="h-11 w-11 rounded-2xl grid place-items-center shrink-0" style="background:var(--brand-soft);color:var(--brand)">${icon('user',20)}</div>
+        <div class="min-w-0 flex-1">
+          <div class="font-bold truncate">${escapeHTML(p.name || 'Sem nome')}</div>
+          <div class="text-xs text-slate-500 truncate">${escapeHTML(p.email || '')}</div>
+        </div>
+        ${p.doctorId === uid() ? '<span class="badge badge-green">Vinculado</span>' : '<span class="badge badge-amber">Disponível</span>'}
+        <span class="text-slate-400">${icon('arrow',18)}</span>
+      </button>`;
+    }
+
+    function doctorPatientsHTML() {
+      const search = state.patientSearch.trim().toLowerCase();
+      const filtered = state.patients.filter(p => `${p.name || ''} ${p.email || ''}`.toLowerCase().includes(search));
+      if (state.selectedPatient) return doctorPatientDetailHTML();
+      return `
+        <section class="fade-in max-w-6xl mx-auto">
+          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div><div class="text-xs font-black tracking-[.18em] text-slate-500 uppercase">Pacientes</div><h1 class="text-3xl font-black mt-2">Acompanhamentos</h1><p class="text-slate-500 mt-2">Selecione um paciente para editar orientações e visualizar evolução.</p></div>
+            <span class="badge badge-slate">${filtered.length} encontrados</span>
+          </div>
+
+          <div class="card mt-6 p-3 sm:p-4">
+            <div class="relative"><div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">${icon('search',19)}</div><input id="patient-search" class="field pl-11" value="${escapeHTML(state.patientSearch)}" placeholder="Buscar por nome ou e-mail…" /></div>
+          </div>
+
+          <div class="grid md:grid-cols-2 xl:grid-cols-3 gap-3 mt-4">
+            ${filtered.length ? filtered.map(patientCard).join('') : emptyState('Nenhum paciente encontrado', 'Crie a conta de paciente no aplicativo e ela aparecerá aqui.', 'people')}
+          </div>
+        </section>`;
+    }
+
+    function patientCard(p) {
+      return `<button data-patient-id="${escapeHTML(p.id)}" class="card p-5 text-left hover:-translate-y-0.5 hover:shadow-xl transition">
+        <div class="flex items-start gap-3"><div class="h-12 w-12 rounded-2xl grid place-items-center" style="background:var(--brand-soft);color:var(--brand)">${icon('user',22)}</div><div class="min-w-0 flex-1"><div class="font-black truncate">${escapeHTML(p.name || 'Sem nome')}</div><div class="text-xs text-slate-500 truncate mt-1">${escapeHTML(p.email || '')}</div></div>${p.doctorId === uid() ? '<span class="badge badge-green">Meu</span>' : '<span class="badge badge-amber">Novo</span>'}</div>
+        <div class="grid grid-cols-2 gap-2 mt-5">
+          <div class="rounded-2xl bg-slate-50 p-3"><div class="text-[11px] uppercase font-bold text-slate-400">Objetivo</div><div class="text-sm font-bold mt-1 truncate">${escapeHTML(p.objective || '—')}</div></div>
+          <div class="rounded-2xl bg-slate-50 p-3"><div class="text-[11px] uppercase font-bold text-slate-400">Idade</div><div class="text-sm font-bold mt-1">${p.age ? escapeHTML(p.age) + ' anos' : '—'}</div></div>
+        </div>
+      </button>`;
+    }
+
+    function doctorPatientDetailHTML() {
+      const p = state.selectedPatient || {};
+      const e = state.selectedPatientEvolution || [];
+      const age = calculateAge(p.dateOfBirth) ?? p.age;
+      const latest = e[0];
+      const currentWeight = latest?.weight ?? p.currentWeight;
+      const bmi = calculateBMI(currentWeight, p.heightCm);
+      const alert = p.alerts?.find(a => a.enabled !== false) || null;
+      const checkin = p.reminders?.dailyCheckin || { enabled: true, time: DEFAULT_CHECKIN_TIME, askWeight: true };
+      return `
+        <section class="fade-in max-w-6xl mx-auto">
+          <button class="btn-secondary !min-h-10 !py-2 !px-3 text-sm" data-action="back-patients">${icon('back',17)} Voltar</button>
+          <div class="mt-5 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+            <div class="flex items-center gap-4"><div class="h-16 w-16 rounded-[20px] grid place-items-center shrink-0" style="background:var(--brand-soft);color:var(--brand)">${icon('user',30)}</div><div><div class="text-xs font-black tracking-[.17em] text-slate-400 uppercase">Paciente</div><h1 class="text-3xl font-black mt-1">${escapeHTML(p.name || 'Sem nome')}</h1><div class="text-sm text-slate-500 mt-1">${escapeHTML(p.email || '')}</div></div></div>
+            ${p.doctorId === uid() ? '<span class="badge badge-green self-start lg:self-auto">Vinculado a você</span>' : '<span class="badge badge-amber self-start lg:self-auto">Paciente disponível</span>'}
+          </div>
+
+          <div class="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-6">
+            ${metricCard('Idade', age !== null && age !== undefined ? `${age} anos` : '—', 'user')}
+            ${metricCard('Peso atual', currentWeight ? `${formatNumber(currentWeight)} kg` : '—', 'scale')}
+            ${metricCard('IMC', bmi ? `${formatNumber(bmi,1)} · ${bmiClassification(bmi, age)}` : '—', 'target')}
+            ${metricCard('Cintura', p.waistCm ? `${formatNumber(p.waistCm)} cm` : '—', 'activity')}
+          </div>
+
+          <div class="grid lg:grid-cols-[1.12fr_.88fr] gap-5 mt-5">
+            <section class="card p-5 sm:p-6">
+              <div><h2 class="text-lg font-black">Perfil e avaliação</h2><p class="text-sm text-slate-500 mt-1">Dados usados para acompanhar o paciente ao longo do tempo.</p></div>
+              <form id="patient-profile-form" class="space-y-6 mt-5">
+                <div class="grid sm:grid-cols-2 gap-4">
+                  <label class="sm:col-span-2"><span class="block text-sm font-bold mb-2">Nome</span><input class="field" name="name" required value="${escapeHTML(p.name || '')}" /></label>
+                  <label><span class="block text-sm font-bold mb-2">Data de nascimento</span><input class="field" name="dateOfBirth" type="date" value="${escapeHTML(p.dateOfBirth || '')}" /></label>
+                  <label><span class="block text-sm font-bold mb-2">Sexo</span><select class="field" name="sex"><option value="" ${!p.sex?'selected':''}>Não informado</option><option ${p.sex==='Feminino'?'selected':''}>Feminino</option><option ${p.sex==='Masculino'?'selected':''}>Masculino</option><option ${p.sex==='Outro'?'selected':''}>Outro</option></select></label>
+                  <label><span class="block text-sm font-bold mb-2">Objetivo</span><select class="field" name="objective">${['Emagrecimento','Ganho de Massa','Atleta','Manutenção','Performance'].map(x=>`<option ${p.objective===x?'selected':''}>${x}</option>`).join('')}</select></label>
+                  <label><span class="block text-sm font-bold mb-2">Nível de atividade</span><select class="field" name="activityLevel">${['Sedentário','Leve','Moderado','Alto','Muito alto'].map(x=>`<option ${p.activityLevel===x?'selected':''}>${x}</option>`).join('')}</select></label>
+                </div>
+
+                <div><div class="text-xs font-black tracking-[.16em] uppercase text-slate-400 mb-3">Antropometria</div><div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <label><span class="block text-xs font-bold mb-1">Altura (cm)</span><input class="field" name="heightCm" type="number" min="80" max="250" step="0.1" value="${p.heightCm ?? ''}" placeholder="170" /></label>
+                  <label><span class="block text-xs font-bold mb-1">Peso alvo (kg)</span><input class="field" name="targetWeight" type="number" min="20" max="400" step="0.1" value="${p.targetWeight ?? ''}" placeholder="70" /></label>
+                  <label><span class="block text-xs font-bold mb-1">Cintura (cm)</span><input class="field" name="waistCm" type="number" min="20" max="250" step="0.1" value="${p.waistCm ?? ''}" /></label>
+                  <label><span class="block text-xs font-bold mb-1">Quadril (cm)</span><input class="field" name="hipCm" type="number" min="20" max="250" step="0.1" value="${p.hipCm ?? ''}" /></label>
+                  <label><span class="block text-xs font-bold mb-1">% gordura</span><input class="field" name="bodyFatPct" type="number" min="1" max="80" step="0.1" value="${p.bodyFatPct ?? ''}" placeholder="Opcional" /></label>
+                  <label><span class="block text-xs font-bold mb-1">Massa muscular (kg)</span><input class="field" name="muscleMassKg" type="number" min="1" max="200" step="0.1" value="${p.muscleMassKg ?? ''}" placeholder="Opcional" /></label>
+                  <label><span class="block text-xs font-bold mb-1">Meta hídrica (ml)</span><input class="field" name="hydrationGoalMl" type="number" min="0" max="10000" step="50" value="${p.hydrationGoalMl ?? ''}" placeholder="Ex.: 2000" /></label>
+                  <label><span class="block text-xs font-bold mb-1">Peso atual inicial (kg)</span><input class="field" name="currentWeight" type="number" min="20" max="400" step="0.1" value="${p.currentWeight ?? ''}" placeholder="Opcional" /></label>
+                </div></div>
+
+                <div><div class="text-xs font-black tracking-[.16em] uppercase text-slate-400 mb-3">Alimentação e contexto</div><div class="grid sm:grid-cols-2 gap-4">
+                  <label><span class="block text-sm font-bold mb-2">Padrão alimentar</span><select class="field" name="dietaryPattern"><option value="">Não informado</option>${['Onívoro','Ovolactovegetariano','Vegetariano','Vegano','Low carb','Outro'].map(x=>`<option ${p.dietaryPattern===x?'selected':''}>${x}</option>`).join('')}</select></label>
+                  <label><span class="block text-sm font-bold mb-2">Restrições</span><input class="field" name="restrictions" value="${escapeHTML(p.restrictions || '')}" placeholder="Preferências / restrições" /></label>
+                  <label><span class="block text-sm font-bold mb-2">Alergias alimentares</span><textarea class="field min-h-24" name="allergies" placeholder="Ex.: amendoim, leite…">${escapeHTML(p.allergies || '')}</textarea></label>
+                  <label><span class="block text-sm font-bold mb-2">Intolerâncias</span><textarea class="field min-h-24" name="intolerances" placeholder="Ex.: lactose, frutose…">${escapeHTML(p.intolerances || '')}</textarea></label>
+                  <label><span class="block text-sm font-bold mb-2">Condições clínicas / histórico</span><textarea class="field min-h-24" name="healthConditions" placeholder="Informações relevantes para o acompanhamento…">${escapeHTML(p.healthConditions || '')}</textarea></label>
+                  <label><span class="block text-sm font-bold mb-2">Medicamentos / suplementos</span><textarea class="field min-h-24" name="medicationsSupplements" placeholder="Nome e observações…">${escapeHTML(p.medicationsSupplements || '')}</textarea></label>
+                  <label class="sm:col-span-2"><span class="block text-sm font-bold mb-2">Histórico de dietas / contexto alimentar</span><textarea class="field min-h-24" name="previousDiets" placeholder="Dietas anteriores, dificuldades, gatilhos, rotina…">${escapeHTML(p.previousDiets || '')}</textarea></label>
+                </div></div>
+
+                <div><div class="text-xs font-black tracking-[.16em] uppercase text-slate-400 mb-3">Acompanhamento do dia</div><div class="rounded-3xl bg-slate-50 border border-slate-100 p-4 space-y-4">
+                  <div class="flex items-center justify-between gap-3"><div><div class="font-black">Check-in diário</div><div class="text-xs text-slate-500 mt-1">Uma solicitação por dia para o paciente registrar como foi o dia.</div></div><label class="inline-flex items-center gap-2 text-sm font-bold"><input id="checkin-enabled" type="checkbox" ${checkin.enabled !== false ? 'checked':''}/> Ativo</label></div>
+                  <div class="grid sm:grid-cols-3 gap-3">
+                    <label><span class="block text-xs font-bold mb-1">Hora do lembrete</span><input class="field" name="checkinTime" type="time" value="${escapeHTML(checkin.time || DEFAULT_CHECKIN_TIME)}" /></label>
+                    <label><span class="block text-xs font-bold mb-1">Pedir peso</span><select class="field" name="checkinAskWeight"><option value="true" ${checkin.askWeight !== false?'selected':''}>Sim</option><option value="false" ${checkin.askWeight === false?'selected':''}>Não</option></select></label>
+                    <label><span class="block text-xs font-bold mb-1">Meta de água (ml)</span><input class="field" name="hydrationGoalMl2" type="number" min="0" max="10000" step="50" value="${p.hydrationGoalMl ?? ''}" /></label>
+                  </div>
+                </div></div>
+
+                <div><div class="text-xs font-black tracking-[.16em] uppercase text-slate-400 mb-3">Lembrete de hidratação</div><div class="rounded-3xl bg-slate-50 border border-slate-100 p-4">
+                  <div class="flex items-center justify-between gap-3"><div><div class="font-black">Água ao longo do dia</div><div class="text-xs text-slate-500 mt-1">Define a cadência e a janela do lembrete.</div></div><label class="inline-flex items-center gap-2 text-sm font-bold"><input id="alert-enabled" type="checkbox" ${alert ? 'checked':''}/> Ativo</label></div>
+                  <div class="grid grid-cols-3 gap-2 mt-4"><label><span class="block text-xs font-bold mb-1">A cada (h)</span><input class="field" name="waterInterval" type="number" min="1" max="12" value="${alert?.intervalHours || 2}" /></label><label><span class="block text-xs font-bold mb-1">Início</span><input class="field" name="waterStart" type="time" value="${alert?.start || '08:00'}" /></label><label><span class="block text-xs font-bold mb-1">Fim</span><input class="field" name="waterEnd" type="time" value="${alert?.end || '22:00'}" /></label></div>
+                </div></div>
+
+                <label><span class="block text-sm font-bold mb-2">Recomendações em destaque</span><textarea class="field min-h-28" name="recommendations" placeholder="Mensagem curta e prática para o paciente…">${escapeHTML(p.recommendations || '')}</textarea></label>
+                <div class="flex flex-col sm:flex-row gap-2 justify-end"><button type="button" class="btn-secondary" data-action="clear-selected">Cancelar</button><button class="btn-primary" type="submit">${icon('save',18)} Salvar acompanhamento</button></div>
+              </form>
+            </section>
+
+            <section class="space-y-5">
+              <section class="card p-5 sm:p-6">
+                <div class="flex items-center justify-between gap-3"><div><div class="text-xs font-black tracking-[.16em] text-slate-400 uppercase">Visão rápida</div><h2 class="text-xl font-black mt-2">Indicadores</h2></div><span class="badge badge-slate">${e.length} registros</span></div>
+                <div class="grid grid-cols-2 gap-2 mt-5">
+                  <div class="rounded-2xl bg-slate-50 p-4"><div class="text-[11px] font-bold uppercase text-slate-400">IMC</div><div class="font-black mt-1">${bmi ? `${formatNumber(bmi,1)}` : '—'}</div><div class="text-xs text-slate-500 mt-1">${bmiClassification(bmi, age)}</div></div>
+                  <div class="rounded-2xl bg-slate-50 p-4"><div class="text-[11px] font-bold uppercase text-slate-400">Peso alvo</div><div class="font-black mt-1">${p.targetWeight ? `${formatNumber(p.targetWeight)} kg` : '—'}</div></div>
+                  <div class="rounded-2xl bg-slate-50 p-4"><div class="text-[11px] font-bold uppercase text-slate-400">Cintura</div><div class="font-black mt-1">${p.waistCm ? `${formatNumber(p.waistCm)} cm` : '—'}</div></div>
+                  <div class="rounded-2xl bg-slate-50 p-4"><div class="text-[11px] font-bold uppercase text-slate-400">Último peso</div><div class="font-black mt-1">${latest?.weight ? `${formatNumber(latest.weight)} kg` : '—'}</div></div>
+                </div>
+              </section>
+              <section class="card p-5 sm:p-6"><div class="text-xs font-black tracking-[.16em] text-slate-400 uppercase">Últimos registros</div><div class="mt-4">${e.length ? evolutionTable(e.slice(0,6), false) : emptyState('Sem histórico', 'Os registros do paciente aparecerão aqui.', 'chart')}</div></section>
+            </section>
+          </div>
+        </section>`;
+    }
+
+    function metricCard(label, value, iconName) {
+      return `<div class="card p-4 sm:p-5"><div class="flex items-start gap-3"><div class="h-10 w-10 rounded-2xl grid place-items-center" style="background:var(--brand-soft);color:var(--brand)">${icon(iconName,19)}</div><div class="min-w-0"><div class="text-xs font-bold uppercase tracking-wider text-slate-400">${escapeHTML(label)}</div><div class="font-black mt-1 leading-5">${escapeHTML(value)}</div></div></div></div>`;
+    }
+
+    function evolutionTable(entries, patientMode = true) {
+      return `
+        <div class="mt-5 space-y-3 md:hidden timeline-line">${entries.map(item => `<div class="flex gap-3"><div class="timeline-dot mt-1"></div><div class="flex-1 pb-3"><div class="flex items-center justify-between gap-2"><span class="font-bold">${formatDate(item.dateKey)}</span><span class="badge badge-slate">${item.weight ? formatNumber(item.weight)+' kg' : '—'}</span></div><div class="grid grid-cols-2 gap-2 mt-2 text-xs text-slate-500">${item.mood?`<span>Humor: ${['','😞','😕','😐','🙂','😄'][item.mood]}</span>`:''}${item.waterLiters!=null?`<span>Água: ${formatNumber(item.waterLiters)} L</span>`:''}${item.exerciseMinutes!=null?`<span>Atividade: ${item.exerciseMinutes} min</span>`:''}${item.sleepHours!=null?`<span>Sono: ${formatNumber(item.sleepHours)} h</span>`:''}</div>${item.note ? `<div class="mt-2 text-sm text-slate-600 bg-slate-50 rounded-2xl p-3">${escapeHTML(item.note)}</div>` : ''}</div></div>`).join('')}</div>
+        <div class="mt-5 overflow-x-auto hidden md:block"><table class="w-full text-sm"><thead><tr class="text-left text-xs uppercase tracking-wider text-slate-400 border-b border-slate-100"><th class="pb-3 pr-4">Data</th><th class="pb-3 pr-4">Peso</th><th class="pb-3 pr-4">Humor</th><th class="pb-3 pr-4">Água</th><th class="pb-3 pr-4">Atividade</th><th class="pb-3 pr-4">Sono</th><th class="pb-3">Observação</th></tr></thead><tbody>${entries.map(item => `<tr class="border-b border-slate-50"><td class="py-4 pr-4 font-bold">${formatDate(item.dateKey)}</td><td class="py-4 pr-4">${item.weight ? formatNumber(item.weight)+' kg' : '—'}</td><td class="py-4 pr-4">${item.mood ? ['','😞','😕','😐','🙂','😄'][item.mood] : '—'}</td><td class="py-4 pr-4">${item.waterLiters!=null ? formatNumber(item.waterLiters)+' L' : '—'}</td><td class="py-4 pr-4">${item.exerciseMinutes!=null ? item.exerciseMinutes+' min' : '—'}</td><td class="py-4 pr-4">${item.sleepHours!=null ? formatNumber(item.sleepHours)+' h' : '—'}</td><td class="py-4 text-slate-500">${escapeHTML(item.note || '—')}</td></tr>`).join('')}</tbody></table></div>`;
+    }
+
+    // ------------------------------------------------------------
+    // Paciente — HTML
+    // ------------------------------------------------------------
+    function patientHomeHTML() {
+      const p = state.patientProfile || {};
+      const alerts = (p.alerts || []).filter(a => a.enabled !== false);
+      const latest = latestEvolution();
+      const age = calculateAge(p.dateOfBirth) ?? p.age;
+      const bmi = calculateBMI(latest?.weight ?? p.currentWeight, p.heightCm);
+      const delta = weightDelta();
+      const today = todayEntry();
+      const checkin = p.reminders?.dailyCheckin || { enabled: true, time: DEFAULT_CHECKIN_TIME, askWeight: true };
+      const askWeight = checkin.askWeight !== false;
+      return `
+        <section class="fade-in max-w-6xl mx-auto">
+          <div class="card overflow-hidden">
+            <div class="p-6 sm:p-8 text-white" style="background:linear-gradient(135deg, var(--brand-dark), var(--brand));">
+              <div class="flex items-start justify-between gap-4"><div><div class="text-xs font-black tracking-[.18em] opacity-80 uppercase">Seu acompanhamento</div><h1 class="text-3xl sm:text-4xl font-black mt-2">Olá, ${escapeHTML((p.name || state.userProfile?.displayName || 'Paciente').split(' ')[0])}.</h1><p class="mt-2 text-white/75">${escapeHTML(p.objective || 'Seu objetivo')}</p></div><div class="h-12 w-12 rounded-2xl grid place-items-center bg-white/10 border border-white/15">${icon('heart',22)}</div></div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-7">
+                <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-white/65">Idade</div><div class="font-black mt-1">${age ?? '—'}${age !== null && age !== undefined ? ' anos' : ''}</div></div>
+                <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-white/65">Peso atual</div><div class="font-black mt-1">${latest?.weight ? formatNumber(latest.weight)+' kg' : '—'}</div></div>
+                <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-white/65">IMC</div><div class="font-black mt-1">${bmi ? formatNumber(bmi,1) : '—'}</div></div>
+                <div class="rounded-2xl bg-white/10 border border-white/10 p-4"><div class="text-xs text-white/65">Meta</div><div class="font-black mt-1">${p.targetWeight ? formatNumber(p.targetWeight)+' kg' : '—'}</div></div>
+              </div>
+            </div>
+            <div class="p-5 sm:p-6">
+              <div class="flex items-start justify-between gap-3"><div class="flex items-start gap-3"><div class="h-11 w-11 rounded-2xl grid place-items-center shrink-0" style="background:var(--brand-soft);color:var(--brand)">${icon('info',22)}</div><div><h2 class="text-lg font-black">Orientações em destaque</h2><p class="text-sm text-slate-500 mt-1">Definidas pelo seu médico.</p></div></div>${patientPermissionLabel()==='Ativadas' ? '<span class="badge badge-green">Notificações ativas</span>' : `<button class="btn-secondary !min-h-10 !py-2 !px-3 text-xs" data-action="enable-notifications">Ativar notificações</button>`}</div>
+              <div class="mt-5 grid lg:grid-cols-2 gap-3">
+                <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4"><div class="text-xs font-black uppercase tracking-wider text-slate-400">Recomendação</div><p class="mt-2 text-sm leading-6 text-slate-700">${escapeHTML(p.recommendations || 'Nenhuma recomendação cadastrada ainda.')}</p></div>
+                <div class="rounded-2xl bg-slate-50 border border-slate-100 p-4"><div class="text-xs font-black uppercase tracking-wider text-slate-400">Alertas</div>${alerts.length ? alerts.map(a => alertCard(a)).join('') : `<p class="mt-2 text-sm text-slate-500">Nenhum alerta ativo.</p>`}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-5">
+            ${metricCard('Variação recente', delta === null ? '—' : `${delta > 0 ? '+' : ''}${formatNumber(delta)} kg`, 'activity')}
+            ${metricCard('Cintura', p.waistCm ? `${formatNumber(p.waistCm)} cm` : '—', 'scale')}
+            ${metricCard('Atividade', p.activityLevel || '—', 'activity')}
+            ${metricCard('Meta hídrica', p.hydrationGoalMl ? `${formatNumber(p.hydrationGoalMl,0)} ml` : '—', 'droplet')}
+          </div>
+
+          <div id="daily-checkin-card" class="card p-5 sm:p-6 mt-5 scroll-mt-24">
+            <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"><div><div class="text-xs font-black tracking-[.17em] text-slate-400 uppercase">Registro diário</div><h2 class="text-2xl font-black mt-2">${today ? 'Seu dia já foi registrado' : 'Como você está hoje?'}</h2><p class="text-sm text-slate-500 mt-2">${today ? 'Você pode atualizar o registro de hoje a qualquer momento.' : 'Leva menos de um minuto e ajuda seu médico a entender sua rotina.'}</p></div>${today ? '<span class="badge badge-green">✓ Feito hoje</span>' : '<span class="badge badge-slate">1 vez por dia</span>'}</div>
+            <form id="evolution-form" class="space-y-5 mt-5">
+              ${askWeight ? `<label><span class="block text-sm font-bold mb-2">Peso de hoje (kg)</span><input class="field" name="weight" required inputmode="decimal" type="number" step="0.1" min="20" max="400" value="${today?.weight ?? latest?.weight ?? ''}" placeholder="70,0" /></label>` : ''}
+              <div><div class="block text-sm font-bold mb-2">Como você se sentiu?</div><div class="grid grid-cols-5 gap-2">${[['1','😞','Muito mal'],['2','😕','Mal'],['3','😐','Ok'],['4','🙂','Bem'],['5','😄','Muito bem']].map(([v,e,l])=>`<label class="mood-option"><input type="radio" name="mood" value="${v}" ${String(today?.mood||'')===v?'checked':''} required><span><b>${e}</b><small>${l}</small></span></label>`).join('')}</div></div>
+              <div class="grid sm:grid-cols-2 gap-4">
+                <label><span class="block text-sm font-bold mb-2">Energia</span><select class="field" name="energy"><option value="">Selecione</option>${[1,2,3,4,5].map(v=>`<option value="${v}" ${String(today?.energy||'')===String(v)?'selected':''}>${v} — ${['Muito baixa','Baixa','Normal','Boa','Excelente'][v-1]}</option>`).join('')}</select></label>
+                <label><span class="block text-sm font-bold mb-2">Fome ao longo do dia</span><select class="field" name="hunger"><option value="">Selecione</option>${[1,2,3,4,5].map(v=>`<option value="${v}" ${String(today?.hunger||'')===String(v)?'selected':''}>${v} — ${['Muito baixa','Baixa','Moderada','Alta','Muito alta'][v-1]}</option>`).join('')}</select></label>
+                <label><span class="block text-sm font-bold mb-2">Seguiu o plano?</span><select class="field" name="adherence"><option value="">Selecione</option>${[1,2,3,4,5].map(v=>`<option value="${v}" ${String(today?.adherence||'')===String(v)?'selected':''}>${v} — ${adherenceLabel(v)}</option>`).join('')}</select></label>
+                <label><span class="block text-sm font-bold mb-2">Água (litros)</span><input class="field" name="waterLiters" type="number" min="0" max="10" step="0.1" value="${today?.waterLiters ?? ''}" placeholder="2,0" /></label>
+                <label><span class="block text-sm font-bold mb-2">Atividade física (min)</span><input class="field" name="exerciseMinutes" type="number" min="0" max="600" step="5" value="${today?.exerciseMinutes ?? ''}" placeholder="45" /></label>
+                <label><span class="block text-sm font-bold mb-2">Sono (horas)</span><input class="field" name="sleepHours" type="number" min="0" max="24" step="0.5" value="${today?.sleepHours ?? ''}" placeholder="7,5" /></label>
+                <label><span class="block text-sm font-bold mb-2">Digestão / intestino</span><select class="field" name="digestion"><option value="">Não informar</option>${['Normal','Levemente alterado','Alterado','Não evacuei hoje'].map(v=>`<option ${today?.digestion===v?'selected':''}>${v}</option>`).join('')}</select></label>
+              </div>
+              <label><span class="block text-sm font-bold mb-2">Observação do dia</span><textarea class="field min-h-28" name="note" maxlength="700" placeholder="Ex.: treino, alimentação fora da rotina, disposição, dificuldade, algo importante…">${escapeHTML(today?.note || '')}</textarea></label>
+              <button class="btn-primary w-full" type="submit">${icon('save',18)} ${today ? 'Atualizar meu dia' : 'Salvar meu dia'}</button>
+            </form>
+          </div>
+        </section>`;
+    }
+
+    function alertCard(alert) {
+      const times = waterTimes(alert.start || '08:00', alert.end || '22:00', Number(alert.intervalHours || 2));
+      return `<div class="mt-2 flex items-start gap-3"><div class="mt-0.5 text-cyan-600">${icon('droplet',18)}</div><div><div class="font-bold">Água a cada ${escapeHTML(alert.intervalHours || 2)} h</div><div class="text-xs text-slate-500 mt-1">${escapeHTML(alert.start || '08:00')}–${escapeHTML(alert.end || '22:00')}</div><div class="text-xs text-slate-500 mt-1">${times.slice(0,6).join(' · ')}${times.length > 6 ? ' · …' : ''}</div></div></div>`;
+    }
+
+    function waterTimes(start, end, hours) {
+      const [sh, sm] = start.split(':').map(Number);
+      const [eh, em] = end.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const endMin = eh * 60 + em;
+      if (!Number.isFinite(startMin) || !Number.isFinite(endMin) || !Number.isFinite(hours) || hours <= 0 || endMin < startMin) return [];
+      const out = [];
+      for (let m = startMin; m <= endMin && out.length < 20; m += hours * 60) {
+        out.push(`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`);
+      }
+      return out;
+    }
+
+    function patientEvolutionHTML() {
+      const p = state.patientProfile || {};
+      const latest = latestEvolution();
+      const age = calculateAge(p.dateOfBirth) ?? p.age;
+      const bmi = calculateBMI(latest?.weight ?? p.currentWeight, p.heightCm);
+      const delta = weightDelta();
+      return `
+        <section class="fade-in max-w-6xl mx-auto">
+          <div class="mb-6"><div class="text-xs font-black tracking-[.18em] text-slate-500 uppercase">Evolução</div><h1 class="text-3xl sm:text-4xl font-black mt-2">Seu histórico</h1><p class="text-slate-500 mt-2">Acompanhe peso, rotina e os registros compartilhados com seu médico.</p></div>
+          <div class="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            ${metricCard('Peso atual', latest?.weight ? `${formatNumber(latest.weight)} kg` : '—', 'scale')}
+            ${metricCard('IMC', bmi ? `${formatNumber(bmi,1)} · ${bmiClassification(bmi, age)}` : '—', 'target')}
+            ${metricCard('Variação recente', delta === null ? '—' : `${delta > 0 ? '+' : ''}${formatNumber(delta)} kg`, 'activity')}
+            ${metricCard('Altura', p.heightCm ? `${formatNumber(p.heightCm,0)} cm` : '—', 'scale')}
+          </div>
+          <section class="card p-5 sm:p-6 mt-5">
+            <div class="flex items-center justify-between gap-3"><div><div class="text-xs font-black tracking-[.17em] text-slate-400 uppercase">Histórico</div><h2 class="text-2xl font-black mt-2">Registros diários</h2></div><span class="badge badge-slate">${(state.patientEvolution||[]).length} registros</span></div>
+            ${(state.patientEvolution || []).length ? evolutionTable(state.patientEvolution, true) : emptyState('Sem registros', 'Faça seu primeiro registro na tela inicial.', 'chart')}
+          </section>
+        </section>`;
+    }
+
+    // ------------------------------------------------------------
+    // Helpers de interface
+    // ------------------------------------------------------------
+    function emptyState(title, description, iconName = 'info') {
+      return `<div class="col-span-full py-10 text-center"><div class="mx-auto h-12 w-12 rounded-2xl grid place-items-center bg-slate-100 text-slate-500">${icon(iconName,22)}</div><div class="font-black mt-3">${escapeHTML(title)}</div><div class="text-sm text-slate-500 mt-1 max-w-md mx-auto">${escapeHTML(description)}</div></div>`;
+    }
+
+    // ------------------------------------------------------------
+    // Eventos — médico
+    // ------------------------------------------------------------
+    function bindDoctorEvents() {
+      document.querySelectorAll('[data-action="back-patients"]').forEach(btn => btn.addEventListener('click', () => { state.selectedPatient = null; state.selectedPatientEvolution = []; renderDoctor(); }));
+      document.querySelectorAll('[data-action="clear-selected"]').forEach(btn => btn.addEventListener('click', () => { state.selectedPatient = null; state.selectedPatientEvolution = []; renderDoctor(); }));
+      document.querySelectorAll('[data-patient-id]').forEach(btn => btn.addEventListener('click', () => selectPatient(btn.dataset.patientId)));
+      document.getElementById('patient-search')?.addEventListener('input', (e) => { state.patientSearch = e.target.value; renderDoctor(); focusPatientSearch(); });
+      document.getElementById('patient-profile-form')?.addEventListener('submit', savePatientProfile);
+    }
+
+    function focusPatientSearch() {
+      const el = document.getElementById('patient-search');
+      if (el) { el.focus(); el.selectionStart = el.selectionEnd = el.value.length; }
+    }
+
+    function selectPatient(patientId) {
+      const p = state.patients.find(x => x.id === patientId);
+      if (!p) return;
+      state.selectedPatient = p;
+      state.selectedPatientEvolution = [];
+      state.currentView = 'patients';
+      refreshSelectedPatientEvolution(patientId);
+      renderDoctor();
+    }
+
+    async function savePatientProfile(event) {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const p = state.selectedPatient;
+      if (!p) return;
+      const alertEnabled = document.getElementById('alert-enabled')?.checked;
+      const checkinEnabled = document.getElementById('checkin-enabled')?.checked;
+      const waterInterval = Number(form.get('waterInterval') || 2);
+      const waterStart = String(form.get('waterStart') || '08:00');
+      const waterEnd = String(form.get('waterEnd') || '22:00');
+      const name = String(form.get('name') || '').trim();
+      if (!name) return toast('Informe o nome do paciente.', 'error');
+      if (alertEnabled && waterEnd < waterStart) return toast('O horário final da hidratação precisa ser igual ou depois do inicial.', 'error');
+      const dateOfBirth = String(form.get('dateOfBirth') || '') || null;
+      if (dateOfBirth && calculateAge(dateOfBirth) === null) return toast('Confira a data de nascimento.', 'error');
+      const payload = {
+        name, email: p.email || '', dateOfBirth, sex: String(form.get('sex') || ''), age: dateOfBirth ? calculateAge(dateOfBirth) : null,
+        objective: String(form.get('objective') || 'Emagrecimento'), activityLevel: String(form.get('activityLevel') || 'Moderado'),
+        heightCm: form.get('heightCm') ? Number(form.get('heightCm')) : null, targetWeight: form.get('targetWeight') ? Number(form.get('targetWeight')) : null,
+        currentWeight: form.get('currentWeight') ? Number(form.get('currentWeight')) : (latestWeight() || null), waistCm: form.get('waistCm') ? Number(form.get('waistCm')) : null,
+        hipCm: form.get('hipCm') ? Number(form.get('hipCm')) : null, bodyFatPct: form.get('bodyFatPct') ? Number(form.get('bodyFatPct')) : null,
+        muscleMassKg: form.get('muscleMassKg') ? Number(form.get('muscleMassKg')) : null, hydrationGoalMl: form.get('hydrationGoalMl2') ? Number(form.get('hydrationGoalMl2')) : (form.get('hydrationGoalMl') ? Number(form.get('hydrationGoalMl')) : null),
+        dietaryPattern: String(form.get('dietaryPattern') || ''), restrictions: String(form.get('restrictions') || '').trim(),
+        allergies: String(form.get('allergies') || '').trim(), intolerances: String(form.get('intolerances') || '').trim(),
+        healthConditions: String(form.get('healthConditions') || '').trim(), medicationsSupplements: String(form.get('medicationsSupplements') || '').trim(), previousDiets: String(form.get('previousDiets') || '').trim(),
+        recommendations: String(form.get('recommendations') || '').trim(), doctorId: uid(),
+        reminders: { dailyCheckin: { enabled: checkinEnabled, time: String(form.get('checkinTime') || DEFAULT_CHECKIN_TIME), askWeight: String(form.get('checkinAskWeight') || 'true') === 'true' } },
+        alerts: alertEnabled ? [{ type:'water', label:'Hidratação', intervalHours:waterInterval, start:waterStart, end:waterEnd, enabled:true }] : [],
+        updatedAt: serverTimestamp()
+      };
+      try {
+        await updateDoc(doc(state.db, 'patients', p.id), payload);
+        state.selectedPatient = { ...p, ...payload, updatedAt: new Date() };
+        toast(navigator.onLine ? 'Acompanhamento salvo e sincronizado.' : 'Acompanhamento salvo no dispositivo.');
+        await refreshDoctorPatients();
+        if (state.selectedPatient?.id) await refreshSelectedPatientEvolution(state.selectedPatient.id);
+        renderDoctor();
+      } catch (error) { console.error(error); toast(firebaseErrorMessage(error), 'error'); }
+    }
+
+    // ------------------------------------------------------------
+    // Eventos — paciente
+    // ------------------------------------------------------------
+    function bindPatientEvents() {
+      document.getElementById('evolution-form')?.addEventListener('submit', saveEvolution);
+    }
+
+    async function saveEvolution(event) {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const weightRaw = String(form.get('weight') || '').trim();
+      const currentWeight = weightRaw ? Number(weightRaw) : Number(latestWeight());
+      const askWeight = state.patientProfile?.reminders?.dailyCheckin?.askWeight !== false;
+      if (askWeight && (!Number.isFinite(currentWeight) || currentWeight < 20 || currentWeight > 400)) return toast('Informe um peso válido.', 'error');
+      const mood = Number(form.get('mood'));
+      if (!Number.isFinite(mood) || mood < 1 || mood > 5) return toast('Escolha como você se sentiu hoje.', 'error');
+      const today = todayEntry();
+      const payload = {
+        patientId: uid(), dateKey: todayKey(), weight: Number.isFinite(currentWeight) ? currentWeight : null,
+        mood, energy: form.get('energy') ? Number(form.get('energy')) : null, hunger: form.get('hunger') ? Number(form.get('hunger')) : null,
+        adherence: form.get('adherence') ? Number(form.get('adherence')) : null, waterLiters: form.get('waterLiters') ? Number(form.get('waterLiters')) : null,
+        exerciseMinutes: form.get('exerciseMinutes') ? Number(form.get('exerciseMinutes')) : null, sleepHours: form.get('sleepHours') ? Number(form.get('sleepHours')) : null,
+        digestion: String(form.get('digestion') || ''), note: String(form.get('note') || '').trim(), createdBy: uid(), updatedAt: serverTimestamp(), createdAt: today?.createdAt || serverTimestamp()
+      };
+      try {
+        await setDoc(doc(state.db, 'patients', uid(), 'evolution', todayKey()), payload, { merge: true });
+        toast(navigator.onLine ? 'Seu dia foi salvo e sincronizado.' : 'Seu dia foi salvo no dispositivo e será sincronizado quando houver internet.');
+        await refreshPatientData();
+        scheduleDailyCheckinPrompt();
+        syncNow();
+      } catch (error) { console.error(error); toast(firebaseErrorMessage(error), 'error'); }
+    }
+
+    function scheduleHydrationNotifications() {
+      if (!isPatient() || !state.patientProfile || !('Notification' in window) || Notification.permission !== 'granted') return;
+      const alert = (state.patientProfile.alerts || []).find(a => a.enabled !== false && a.type === 'water');
+      if (!alert) return;
+      const times = waterTimes(alert.start || '08:00', alert.end || '22:00', Number(alert.intervalHours || 2));
+      const now = new Date();
+      for (const time of times) {
+        const [h,m] = time.split(':').map(Number); const target = new Date(); target.setHours(h,m,0,0);
+        if (target <= now) continue;
+        state.notificationTimerIds.push(setTimeout(() => showBrowserNotification('Hora de beber água', `Lembrete definido pelo seu médico: ${time}.`), target-now));
+      }
+    }
+
+    // ------------------------------------------------------------
+    // Ajuda — fluxo guiado em estilo chat
+    // ------------------------------------------------------------
+    const HELP_TREE = {
+      root: {
+        text: 'Com o que você precisa de ajuda?',
+        options: [
+          ['account','Conta e acesso'], ['notifications','Notificações e lembretes'], ['privacy','Dados e privacidade'],
+          ['usage','Como usar o app'], ['offline','Offline e sincronização'], ['install','Instalação / PWA'], ['bugs','Bug ou problema']
+        ]
+      },
+      account: { text: 'Qual parte da conta está te atrapalhando?', options:[['login','Não consigo entrar'],['verify','Confirmar e-mail'],['google','Login com Google'],['doctor','Minha conta é de médico'],['back','Voltar']] },
+      notifications: { text: 'Sobre os lembretes, qual assunto?', options:[['daily','Check-in diário'],['water','Hidratação'],['permission','Permitir notificações'],['back','Voltar']] },
+      privacy: { text: 'O que você quer entender sobre seus dados?', options:[['access','O que o médico vê'],['offlinePrivacy','O que fica salvo no aparelho'],['back','Voltar']] },
+      usage: { text: 'O que você quer aprender?', options:[['patientFlow','Como preencher meu dia'],['doctorFlow','Como acompanhar um paciente'],['bmi','Como funciona o IMC'],['back','Voltar']] },
+      offline: { text: 'Sobre o modo offline:', options:[['offlineHow','Como funciona'],['sync','Quando sincroniza'],['back','Voltar']] },
+      install: { text: 'Onde você quer instalar?', options:[['android','Android'],['iphone','iPhone'],['desktop','Computador'],['back','Voltar']] },
+      bugs: { text: 'Para reportar um bug ou pedir suporte, use o canal configurado pela clínica.', options:[['openSupport','Abrir suporte'],['back','Voltar']] }
+    };
+    const HELP_ANSWERS = {
+      login:'Confira e-mail e senha. Se esqueceu a senha, use “Esqueci minha senha”. Se estiver sem internet, o primeiro login precisa ter sido feito antes para o acesso local continuar disponível.',
+      verify:'Contas com e-mail e senha precisam confirmar o endereço. Procure o e-mail do Firebase, clique no link e volte ao app; há um botão para reenviar a mensagem na tela de confirmação.',
+      google:'O login com Google usa o provedor oficial do Firebase. No celular, o app usa o fluxo de redirecionamento; no computador, pode abrir uma janela de autenticação.',
+      doctor:'A função de médico é definida pelo administrador no documento users/{uid} do Firestore. O cadastro público nunca concede essa função sozinho.',
+      daily:'O check-in diário reúne humor, energia, fome, adesão ao plano, água, atividade física, sono, digestão e observações. O médico controla se ele fica ativo, o horário e se o peso será solicitado.',
+      water:'O médico pode definir uma janela e uma cadência de hidratação. O app mostra os horários e pode usar notificações do navegador quando autorizadas.',
+      permission:'No painel do paciente, toque em “Ativar notificações” e permita no navegador. A permissão é dada pelo próprio dispositivo.',
+      access:'O médico vinculado tem acesso ao perfil médico e aos registros de evolução/check-ins necessários para o acompanhamento. A conta do paciente não pode ver os dados de outros pacientes.',
+      offlinePrivacy:'O Firestore mantém um cache local para que o aplicativo continue útil offline. Em dispositivos compartilhados, o usuário deve sair da conta e o dispositivo deve ser confiável.',
+      patientFlow:'Abra “Início”, preencha o check-in do dia e salve. Na aba “Evolução”, você acompanha o histórico.',
+      doctorFlow:'Abra “Pacientes”, pesquise o paciente, abra o acompanhamento e atualize avaliação, objetivo, orientações e lembretes.',
+      bmi:'O IMC é calculado por peso ÷ altura². Para adultos, o app exibe a classificação de referência; em menores de 18 anos, ele não substitui a interpretação por idade e sexo.',
+      offlineHow:'Alterações feitas sem internet ficam no cache do Firestore e aguardam sincronização. O sistema tenta atualizar quando a conexão volta.',
+      sync:'Ao abrir o app com internet e quando a conexão retorna, o MedCare tenta sincronizar as alterações pendentes.',
+      android:'No Android, use o Chrome e escolha “Instalar app” ou “Adicionar à tela de início” quando aparecer.',
+      iphone:'No iPhone, abra no Safari, toque em Compartilhar e depois em “Adicionar à Tela de Início”.',
+      desktop:'No Chrome/Edge, use o ícone de instalação na barra de endereço quando o PWA estiver elegível.',
+      openSupport:'__SUPPORT__'
+    };
+
+    function helpChoiceLabel(key) {
+      for (const node of Object.values(HELP_TREE)) {
+        const found = (node.options || []).find(([k]) => k === key);
+        if (found) return found[1];
+      }
+      return key;
+    }
+
+    function renderHelp() {
+      const current = state.helpTrail[state.helpTrail.length-1] || 'root';
+      const node = HELP_TREE[current];
+      const answerRaw = node ? null : HELP_ANSWERS[current];
+      const answer = answerRaw === '__SUPPORT__' ? 'Abra o canal de suporte configurado pela clínica para falar sobre bugs, erros ou dúvidas que não foram resolvidas aqui.' : answerRaw;
+      const historyKeys = state.helpTrail.slice(0,-1);
+      const bubbles = historyKeys.map(key => `<div class="help-bubble user">${escapeHTML(helpChoiceLabel(key))}</div>`).join('');
+      document.getElementById('main-content').innerHTML = `
+        <section class="fade-in max-w-3xl mx-auto">
+          <div class="mb-6"><div class="text-xs font-black tracking-[.18em] text-slate-500 uppercase">Central de ajuda</div><h1 class="text-3xl sm:text-4xl font-black mt-2">Como podemos ajudar?</h1><p class="text-slate-500 mt-2">Escolha uma opção. O atendimento aqui é guiado, sem respostas livres.</p></div>
+          <section class="card p-4 sm:p-6"><div class="help-chat">
+            <div class="help-bubble bot">Olá! Eu vou te conduzir até a informação certa.</div>
+            ${bubbles}
+            ${answer ? `<div class="help-bubble bot whitespace-pre-line">${escapeHTML(answer)}</div>` : `<div class="help-bubble bot">${escapeHTML(node?.text || HELP_TREE.root.text)}</div>`}
+            ${answer ? `<button class="btn-secondary w-full mt-3" data-help-root>${icon('back',17)} Voltar ao começo</button>${answerRaw==='__SUPPORT__' ? (SUPPORT_URL.startsWith('http') ? `<a class="btn-primary w-full mt-2" href="${escapeHTML(SUPPORT_URL)}" target="_blank" rel="noopener">${icon('arrow',18)} Abrir suporte</a>` : `<div class="mt-2 rounded-2xl bg-amber-50 border border-amber-100 p-3 text-xs text-amber-800">O link de suporte ainda não foi configurado pelo administrador.</div>`) : ''}` : `<div class="grid sm:grid-cols-2 gap-2 mt-4">${(node?.options || []).map(([key,label])=>key==='back'?`<button class="btn-secondary" data-help-back>${icon('back',17)} ${escapeHTML(label)}</button>`:`<button class="help-choice" data-help="${escapeHTML(key)}">${escapeHTML(label)}<span>›</span></button>`).join('')}</div>`}
+          </div></section>
+        </section>`;
+      bindHelpEvents();
+    }
+
+    function bindHelpEvents() {
+      document.querySelectorAll('[data-help]').forEach(btn => btn.addEventListener('click', () => {
+        const key = btn.dataset.help;
+        if (HELP_ANSWERS[key]) state.helpTrail.push(key);
+        else state.helpTrail.push(key);
+        renderHelp();
+      }));
+      document.querySelector('[data-help-back]')?.addEventListener('click', () => { state.helpTrail = state.helpTrail.slice(0,-1); renderHelp(); });
+      document.querySelector('[data-help-root]')?.addEventListener('click', () => { state.helpTrail = []; renderHelp(); });
+    }
+
+    // ------------------------------------------------------------
+    // Navegação por delegação simples para botões gerados novamente
+    // ------------------------------------------------------------
+    document.addEventListener('click', (event) => {
+      const action = event.target.closest('[data-action]');
+      if (!action) return;
+      const value = action.dataset.action;
+      if (value === 'go-patients') { state.currentView = 'patients'; state.selectedPatient = null; renderApp(); }
+      if (value === 'enable-notifications') requestPatientNotifications();
+    });
+
+    // Inicialização
+    loadingScreen('Inicializando…');
+    initFirebase();
+  </script>
+</body>
+</html>
